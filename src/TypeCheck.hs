@@ -12,12 +12,16 @@ import qualified Data.Map as M
 import AST
 
 
-type TypeCheckMonad = ReaderT (Type, BlockID, DefinitionLocationInfo)
-                        (StateT TypeInfo
-                            (Except String))
+type TypeCheckMonad = StateT Context (Except String)
+data Context = Context { returnType             :: Type
+                       , blockID                :: BlockID
+                       , definitionLocationInfo :: DefinitionLocationInfo
+                       , typeInfo               :: TypeInfo
+                       } deriving (Show, Eq)
+-- (Type, BlockID, DefinitionLocationInfo)
 type TypeInfo = M.Map SymbolLocation Type
-type DefinitionLocationInfo = M.Map Identifier BlockID
 data SymbolLocation = SLoc BlockID String deriving (Eq, Ord, Show)
+type DefinitionLocationInfo = M.Map Identifier BlockID
 
 
 buildTypeInformation :: Program -> Either String (Program, TypeInfo)
@@ -31,54 +35,44 @@ btiProgram (Program fns) =
     -- as their statement. It sounds reasonable, but the AST types could be
     -- changed in a way not to have to make this assumption.
     -- Collect function types
-    foldr writeFunctionType typeCheckFunctionBodies fns
+    mapM_ writeFunctionType fns >> typeCheckFunctionBodies
     where
-        writeFunctionType (FnDef tRet ident args _) cont = do
+        writeFunctionType (FnDef tRet ident args _) = do
             let argsTypes = map (\(Arg t _) -> t) args
-            writeSymbolInfo ident (TFunction tRet argsTypes) cont
+            writeSymbolInfo ident (TFunction tRet argsTypes)
         typeCheckFunctionBodies = forM_ fns $ \(FnDef tRet _ args body@(Block bid stms)) ->
-            withBlock bid $
-                let contBlock = local (\(_, currBlock, dli) -> (tRet, currBlock, dli)) $
-                        btiStmt body $ return ()
-                    writeArgInfo (Arg t ident) = writeSymbolInfo ident t
-                in foldr writeArgInfo contBlock args
+            withBlock bid $ do
+                forM_ args $ \(Arg t ident) -> writeSymbolInfo ident t
+                withReturnType tRet $ btiStmt body
 
 
-btiStmt :: Stmt -> TypeCheckMonad () -> TypeCheckMonad ()
-btiStmt (Assign ident e) cont  = do
+btiStmt :: Stmt -> TypeCheckMonad ()
+btiStmt (Assign ident e)       = do
     sType <- getSymbolType ident
     assertExprType sType e
-    cont
-btiStmt (Block bid stmts) cont = do
-    withBlock bid $
-        foldr btiStmt (return ()) stmts
-    cont -- Do not put cont as an argument to foldr,
-         -- because we do not want to preserve information
-         -- from Reader part of the monad stack.
-btiStmt (Decl t items) cont    = foldr (btiItem t) cont items
-btiStmt Empty cont             = cont
-btiStmt (If cond e1 e2) cont   = do
+btiStmt (Block bid stmts)      = withBlock bid $ mapM_ btiStmt stmts
+btiStmt (Decl t items)         = mapM_ (btiItem t) items
+btiStmt Empty                  = return ()
+btiStmt (If cond e1 e2)        = do
     assertExprType (TNamed "bool") cond
-    btiStmt e1 $ btiStmt e2 cont
-btiStmt (Return e) cont        = do
-    tRet <- currentReturnType
+    btiStmt e1 >> btiStmt e2
+btiStmt (Return e)             = do
+    tRet <- gets returnType
     assertExprType tRet e
-    cont
-btiStmt (SExpr e) cont         = typeOfExpr e >> cont
-btiStmt VReturn cont           = do
-    tRet <- currentReturnType
+btiStmt (SExpr e)              = void $ typeOfExpr e
+btiStmt VReturn                = do
+    tRet <- gets returnType
     typeCompare (TNamed "void") tRet
-    cont
-btiStmt (While cond stmt) cont = do
+btiStmt (While cond stmt)      = do
     assertExprType (TNamed "bool") cond
-    btiStmt stmt cont
+    btiStmt stmt
 
 
-btiItem :: Type -> Item -> TypeCheckMonad () -> TypeCheckMonad ()
-btiItem t (ItemDeclDefault ident) cont = writeSymbolInfo ident t cont
-btiItem t (ItemDecl ident e) cont = do
+btiItem :: Type -> Item -> TypeCheckMonad ()
+btiItem t (ItemDeclDefault ident) = writeSymbolInfo ident t
+btiItem t (ItemDecl ident e) = do
     assertExprType t e
-    writeSymbolInfo ident t cont
+    writeSymbolInfo ident t
 
 
 typeCompare :: Type -> Type -> TypeCheckMonad ()
@@ -136,33 +130,55 @@ assertExprType t e = do
     typeCompare t te
 
 
-writeSymbolInfo :: Identifier -> Type -> TypeCheckMonad () -> TypeCheckMonad ()
-writeSymbolInfo ident t cont = do
+writeSymbolInfo :: Identifier -> Type -> TypeCheckMonad ()
+writeSymbolInfo ident t = do
     -- TODO: Check if the variable was already defined in this block
-    (tRet, currBlock, dli) <- ask
-    wasDefined <- gets $ (Nothing/=) . M.lookup (SLoc currBlock ident)
+    -- (tRet, currBlock, dli) <- ask
+    currBlock <- gets blockID
+    wasDefined <- gets $ (Nothing/=) . M.lookup (SLoc currBlock ident) . typeInfo
     when wasDefined $ throwError $ "Symbol " ++ show ident ++ " was already defined"
-    modify $ M.insert (SLoc currBlock ident) t
-    local (const (tRet, currBlock, M.insert ident currBlock dli)) cont
+    modify $ \c -> c { typeInfo = M.insert (SLoc currBlock ident) t $ typeInfo c
+                     , definitionLocationInfo = M.insert ident currBlock $ definitionLocationInfo c }
 
 
-withBlock :: BlockID -> TypeCheckMonad () -> TypeCheckMonad ()
-withBlock bid = local (\(tRet, _, dli) -> (tRet, bid, dli)) 
+withReturnType :: Type -> TypeCheckMonad a -> TypeCheckMonad a
+withReturnType = withPartialState returnType $ \t c -> c { returnType = t }
+
+
+withBlock :: BlockID -> TypeCheckMonad a -> TypeCheckMonad a
+withBlock = withPartialState blockID $ \b c -> c { blockID = b }
+
+
+withDefinitionLocationInfo :: DefinitionLocationInfo -> TypeCheckMonad a -> TypeCheckMonad a
+withDefinitionLocationInfo = withPartialState definitionLocationInfo $ \d c -> c { definitionLocationInfo = d }
 
 
 getSymbolType :: Identifier -> TypeCheckMonad Type
 getSymbolType ident = do
-    (_, _, dli) <- ask
-    info <- get
+    dli <- gets definitionLocationInfo
+    info <- gets typeInfo
     case M.lookup ident dli >>= \loc -> M.lookup (SLoc loc ident) info of
         Just t  -> return t
         Nothing -> throwError $ "Unknown variable: " ++ show ident
 
 
-currentReturnType :: TypeCheckMonad Type
-currentReturnType = asks $ \(tRet, _, _) -> tRet
-
-
 runTCM :: TypeCheckMonad a -> Either String (a, TypeInfo)
-runTCM = runExcept . (`runStateT` M.empty) . (`runReaderT` (TNamed "void", 0, M.empty))
+runTCM m = runExcept . (`evalStateT` defaultContext) $ (,) <$> m <*> gets typeInfo
+
+
+withPartialState :: (MonadState s m) => (s -> s') -> (s' -> s -> s) -> s' -> m a -> m a
+withPartialState extract fuse s' m = do
+    p <- gets extract
+    modify $ fuse s'
+    r <- m
+    modify $ fuse p
+    return r
+
+
+defaultContext :: Context
+defaultContext = Context { returnType             = TNamed "void"
+                         , blockID                = 0
+                         , definitionLocationInfo = M.empty
+                         , typeInfo               = M.empty
+                         }
 
