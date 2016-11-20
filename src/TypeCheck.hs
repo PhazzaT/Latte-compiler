@@ -8,8 +8,10 @@ import Control.Monad.Reader
 import Control.Monad.State
 
 import qualified Data.Map as M
+import Data.Maybe
 
 import AST
+import Utility
 
 
 type TypeCheckMonad = StateT Context (Except String)
@@ -20,7 +22,7 @@ data Context = Context { returnType             :: Type
                        } deriving (Show, Eq)
 -- (Type, BlockID, DefinitionLocationInfo)
 type TypeInfo = M.Map SymbolLocation Type
-data SymbolLocation = SLoc BlockID String deriving (Eq, Ord, Show)
+data SymbolLocation = SLoc BlockID Identifier deriving (Eq, Ord, Show)
 type DefinitionLocationInfo = M.Map Identifier BlockID
 
 
@@ -69,9 +71,8 @@ btiStmt (While cond stmt)      = do
 
 
 btiItem :: Type -> Item -> TypeCheckMonad ()
-btiItem t (ItemDeclDefault ident) = writeSymbolInfo ident t
-btiItem t (ItemDecl ident e) = do
-    assertExprType t e
+btiItem t (Item ident me) = do
+    fromMaybe (return ()) $ assertExprType t <$> me
     writeSymbolInfo ident t
 
 
@@ -166,19 +167,23 @@ runTCM :: TypeCheckMonad a -> Either String (a, TypeInfo)
 runTCM m = runExcept . (`evalStateT` defaultContext) $ (,) <$> m <*> gets typeInfo
 
 
-withPartialState :: (MonadState s m) => (s -> s') -> (s' -> s -> s) -> s' -> m a -> m a
-withPartialState extract fuse s' m = do
-    p <- gets extract
-    modify $ fuse s'
-    r <- m
-    modify $ fuse p
-    return r
-
-
 defaultContext :: Context
 defaultContext = Context { returnType             = TNamed "void"
                          , blockID                = 0
                          , definitionLocationInfo = M.empty
                          , typeInfo               = M.empty
                          }
+
+
+tVoid :: Type
+tVoid = TNamed "void"
+
+tBool :: Type
+tBool = TNamed "bool"
+
+tString :: Type
+tString = TNamed "string"
+
+tInt :: Type
+tInt = TNamed "int"
 

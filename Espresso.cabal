@@ -21,10 +21,13 @@ library
   other-modules:       Lexer
                      , Parser
                      , TypeCheck
+                     , Utility
+                     , RenameUnique
   build-depends:       base >= 4.7 && < 5
                      , mtl
                      , array
                      , containers
+                     , syb
   default-language:    Haskell2010
 
 executable Espresso-exe

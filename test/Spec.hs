@@ -1,3 +1,5 @@
+{-# LANGUAGE OverloadedStrings #-}
+
 import Test.Hspec
 import Test.QuickCheck
 
@@ -13,7 +15,7 @@ import CompilePasses(lexAndParse, typeCheck, SymbolLocation(SLoc))
 
 main :: IO ()
 main = hspec $ do
-    let makeFun s = "void foo() { " ++ s ++ " }"
+    let makeFun s = "void foo() { " ++ s ++ " }" :: String
     describe "Parsing" $ do
         let parsesOK  s = lexAndParse s `shouldSatisfy` isRight
         let parsesBad s = lexAndParse s `shouldNotSatisfy` isRight

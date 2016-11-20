@@ -86,10 +86,10 @@ Program :: { Program }
 Program : list(FnDef) { Program $1 }
 
 FnDef :: { FnDef }
-FnDef : Type identifier '(' listSep(Arg, ',') ')' Block { FnDef $1 $2 $4 $6 }
+FnDef : Type Identifier '(' listSep(Arg, ',') ')' Block { FnDef $1 $2 $4 $6 }
 
 Arg :: { Arg }
-Arg : Type identifier { Arg $1 $2 }
+Arg : Type Identifier { Arg $1 $2 }
 
 
 -- Statements --
@@ -103,9 +103,9 @@ Stmt : Type listSepNEmpty(Item, ',') ';' { Decl $1 $2 }
 
 Stmt1 :: { Stmt }
 Stmt1 : ';'                              { Empty }
-      | identifier '=' Expr ';'          { Assign $1 $3 }
-      | identifier '++' ';'              { Assign $1 (EAdd (EVar $1) Plus (EIntLiteral 1)) }
-      | identifier '--' ';'              { Assign $1 (EAdd (EVar $1) Minus (EIntLiteral 1)) }
+      | Identifier '=' Expr ';'          { Assign $1 $3 }
+      | Identifier '++' ';'              { Assign $1 (EAdd (EVar $1) Plus (EIntLiteral 1)) }
+      | Identifier '--' ';'              { Assign $1 (EAdd (EVar $1) Minus (EIntLiteral 1)) }
       | return Expr ';'                  { Return $2 }
       | return ';'                       { VReturn }
       | if '(' Expr ')' Stmt1 else Stmt1 { If $3 $5 $7 }
@@ -115,8 +115,8 @@ Stmt1 : ';'                              { Empty }
       | Block                            { $1 }
 
 Item :: { Item }
-Item : identifier          { ItemDeclDefault $1 }
-     | identifier '=' Expr { ItemDecl $1 $3 }
+Item : Identifier          { Item $1 Nothing }
+     | Identifier '=' Expr { Item $1 (Just $3) }
 
 
 -- Expressions --
@@ -142,10 +142,10 @@ Expr5 : '!' Expr6 { Not $2 }
       | Expr6     { $1 }
 Expr6 :: { Expr }
 Expr6 : stringLiteral                         { EString $1 }
-      | identifier '(' listSep(Expr, ',') ')' { EApp $1 $3 }
+      | Identifier '(' listSep(Expr, ',') ')' { EApp $1 $3 }
       | boolLiteral                           { EBoolLiteral $1 }
       | intLiteral                            { EIntLiteral $1 }
-      | identifier                            { EVar $1 }
+      | Identifier                            { EVar $1 }
       | '(' Expr ')'                          { $2 }
 
 
@@ -169,10 +169,15 @@ RelOp : '<'  { Less }
       | '!=' { NotEqual }
 
 
--- Types --
+-- Others --
 
 Type :: { Type }
 Type : identifier { TNamed $1 }
+-- TODO: Change "identifier" to something more sensible
+
+
+Identifier :: { Identifier }
+Identifier : identifier { ID $1 }
 
 
 -- Auxiliary parametrized productions --
