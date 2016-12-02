@@ -23,6 +23,7 @@ library
                      , TypeCheck
                      , Utility
                      , RenameUnique
+                     , GenerateSSA
   build-depends:       base >= 4.7 && < 5
                      , mtl
                      , array

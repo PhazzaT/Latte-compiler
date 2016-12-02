@@ -174,16 +174,3 @@ defaultContext = Context { returnType             = TNamed "void"
                          , typeInfo               = M.empty
                          }
 
-
-tVoid :: Type
-tVoid = TNamed "void"
-
-tBool :: Type
-tBool = TNamed "bool"
-
-tString :: Type
-tString = TNamed "string"
-
-tInt :: Type
-tInt = TNamed "int"
-
