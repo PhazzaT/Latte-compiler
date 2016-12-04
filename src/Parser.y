@@ -104,8 +104,8 @@ Stmt : Type listSepNEmpty(Item, ',') ';' { Decl $1 $2 }
 Stmt1 :: { Stmt }
 Stmt1 : ';'                              { Empty }
       | Identifier '=' Expr ';'          { Assign $1 $3 }
-      | Identifier '++' ';'              { Assign $1 (EAdd (EVar $1) Plus (EIntLiteral 1)) }
-      | Identifier '--' ';'              { Assign $1 (EAdd (EVar $1) Minus (EIntLiteral 1)) }
+      | Identifier '++' ';'              { Assign $1 (EApp "+" [EVar $1, EIntLiteral 1]) }
+      | Identifier '--' ';'              { Assign $1 (EApp "-" [EVar $1, EIntLiteral 1]) }
       | return Expr ';'                  { Return $2 }
       | return ';'                       { VReturn }
       | if '(' Expr ')' Stmt1 else Stmt1 { If $3 $5 $7 }
@@ -122,23 +122,23 @@ Item : Identifier          { Item $1 Nothing }
 -- Expressions --
 
 Expr :: { Expr }
-Expr : Expr1 '||' Expr { ELogic $1 Or $3 }
+Expr : Expr1 '||' Expr { EApp "||" [$1, $3] }
      | Expr1           { $1 }
 Expr1 :: { Expr }
-Expr1 : Expr2 '&&' Expr1 { ELogic $1 And $3 }
+Expr1 : Expr2 '&&' Expr1 { EApp "&&" [$1, $3] }
       | Expr2            { $1 }
 Expr2 :: { Expr }
-Expr2 : Expr2 RelOp Expr3 { ERel $1 $2 $3 }
+Expr2 : Expr2 RelOp Expr3 { EApp (show $2) [$1, $3] }
       | Expr3             { $1 }
 Expr3 :: { Expr }
-Expr3 : Expr3 AddOp Expr4 { EAdd $1 $2 $3 }
+Expr3 : Expr3 AddOp Expr4 { EApp (show $2) [$1, $3] }
       | Expr4             { $1 }
 Expr4 :: { Expr }
-Expr4 : Expr4 MulOp Expr5 { EMul $1 $2 $3 }
+Expr4 : Expr4 MulOp Expr5 { EApp (show $2) [$1, $3] }
       | Expr5             { $1 }
 Expr5 :: { Expr }
-Expr5 : '!' Expr6 { Not $2 }
-      | '-' Expr6 { Neg $2 }
+Expr5 : '!' Expr6 { EApp "!" [$2] }
+      | '-' Expr6 { EApp "-" [$2] }
       | Expr6     { $1 }
 Expr6 :: { Expr }
 Expr6 : stringLiteral                         { EString $1 }
@@ -177,7 +177,7 @@ Type : identifier { TNamed $1 }
 
 
 Identifier :: { Identifier }
-Identifier : identifier { ID $1 }
+Identifier : identifier { $1 }
 
 
 -- Auxiliary parametrized productions --

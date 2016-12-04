@@ -1,8 +1,6 @@
 module CompilePasses ( compile
                      , lexAndParse
                      , typeCheck
-                     , SymbolLocation(SLoc)
-                     , renameUnique
                      , astToSSA
                      ) where
 
@@ -15,19 +13,18 @@ import AST
 import Lexer
 import Parser
 import TypeCheck
-import RenameUnique
+-- import RenameUnique
 import GenerateSSA
 
 
 compile :: String -> Either String String
 compile = lexAndParse
       >=> typeCheck
-      >=> uncurry renameUnique
       >=> astToSSA
       >=> \m ->
             let els = M.assocs m
                 alles = flip map els $ \(name, stmts) ->
-                        name ++ ":\n\t" ++ intercalate "\n\t" (map show stmts)
+                        show name ++ ":\n\t" ++ intercalate "\n\t" (map show stmts)
             in return $ intercalate "\n\n" alles
 
 
@@ -35,6 +32,6 @@ lexAndParse :: String -> Either String Program
 lexAndParse = tokenize >=> parse
 
 
-typeCheck :: Program -> Either String (Program, TypeInfo)
+typeCheck :: Program -> Either String ProgramTyped
 typeCheck = buildTypeInformation
 

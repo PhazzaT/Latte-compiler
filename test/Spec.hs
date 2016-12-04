@@ -5,12 +5,14 @@ import Test.QuickCheck
 
 import Control.Monad
 import Data.Either
+import Data.Generics
 import Data.Int
+import Data.List
 import qualified Data.Map as M
 import Data.Monoid
 
 import AST
-import CompilePasses(lexAndParse, typeCheck, SymbolLocation(SLoc))
+import CompilePasses(lexAndParse, typeCheck)
 
 
 main :: IO ()
@@ -116,16 +118,15 @@ main = hspec $ do
 
 
     describe "Type checking" $ do
-        let tVoid = TNamed "void"
-        let tInt = TNamed "int"
-        let tString = TNamed "string"
-        let tBool = TNamed "bool"
+        let tFun = TFunction
         let tc = lexAndParse >=> typeCheck
         let tcOK s = tc s `shouldSatisfy` isRight
         let tcBad s = tc s `shouldNotSatisfy` isRight
-        let infers loc t (Right (_, tci)) =
-                All $ M.lookup loc tci == Just t
-            infers _ _ (Left _) = All False
+        let hasIdentifiers ids p = all (`elem` allIdents) ids
+                where
+                    allIdents = everything (++) ([] `mkQ` select) p
+                    select m = [m] :: [MangledIdentifier]
+        let mid = MangledIdentifier
 
         it "typechecks an empty program" $
             tcOK ""
@@ -140,18 +141,18 @@ main = hspec $ do
             tcBad "int foo() { return \"The quick brown fox...\"; }"
 
         it "assigns correct types to declared variables" $
-            tc "void foo() { int i; string s; }" `shouldSatisfy` getAll . (
-                infers (SLoc 1 "i") tInt
-                <> infers (SLoc 1 "s") tString)
+            tc "void foo() { int i; string s; }"
+                `shouldSatisfy` hasIdentifiers [ mid "i" tInt [1, 0]
+                                               , mid "s" tString [1, 0] ]
 
         it "assigns correct types to functions" $
-            tc "void foo(string what, int times) { return; }" `shouldSatisfy`
-                getAll . infers (SLoc 0 "foo") (TFunction tVoid [tString, tInt])
+            tc "void foo(string what, int times) { return; }"
+                `shouldSatisfy` hasIdentifiers [ mid "foo" (tFun tVoid [tString, tInt]) [0] ]
 
         it "assigns correct types to arguments" $
-            tc "int gcd(int a, int b) { return 42; }" `shouldSatisfy` getAll . (
-                infers (SLoc 1 "a") tInt
-                <> infers (SLoc 1 "b") tInt)
+            tc "int gcd(int a, int b) { return 42; }"
+                `shouldSatisfy` hasIdentifiers [ mid "a" tInt [1, 0]
+                                               , mid "b" tInt [1, 0] ]
 
         it "refuses two declarations of the same name in the same block" $
             tcBad $ makeFun "int x = 42; string x = \"The quick brown fox...\";"
@@ -161,8 +162,8 @@ main = hspec $ do
         
         it "allows for name shadowing in different scopes" $
             tc (makeFun "int x = 42; { string x = \"The quick brown fox...\"; }")
-                `shouldSatisfy` getAll . ( infers (SLoc 2 "x") tInt
-                                         <> infers (SLoc 1 "x") tString)
+                `shouldSatisfy` hasIdentifiers [ mid "x" tString [1, 2, 0]
+                                               , mid "x" tInt [2, 0] ]
                                          -- See src/Parser.y for explanation on
                                          -- the scope numbering convention
 
