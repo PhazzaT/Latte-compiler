@@ -145,8 +145,10 @@ Expr6 : stringLiteral                         { EString $1 }
       | Identifier '(' listSep(Expr, ',') ')' { EApp $1 $3 }
       | boolLiteral                           { EBoolLiteral $1 }
       | intLiteral                            { EIntLiteral $1 }
-      | Identifier                            { EVar $1 }
+      | Identifier list(ArrayIndex)           { foldl (\a x -> EApp "[]" [a, x]) (EVar $1) $2 }
       | '(' Expr ')'                          { $2 }
+ArrayIndex :: { Expr }
+ArrayIndex : '[' Expr ']' { $2 }
 
 
 -- Operators --
@@ -171,8 +173,12 @@ RelOp : '<'  { Less }
 
 -- Others --
 
+ArrayMarks :: { Int }
+ArrayMarks :                   { 0 }
+          | '[' ']' ArrayMarks { $3 + 1 }
+
 Type :: { Type }
-Type : identifier { TNamed $1 }
+Type : Identifier ArrayMarks { iterate TArray (TNamed $1) !! $2 }
 -- TODO: Change "identifier" to something more sensible
 
 

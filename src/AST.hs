@@ -72,6 +72,7 @@ instance Show RelOp where
     show NotEqual = "!="
 
 data Type = TNamed String
+          | TArray Type
           | TFunction Type [Type]
           deriving (Eq, Ord, Data, Typeable)
 
@@ -98,6 +99,7 @@ globalScopeID = 0
 
 typeMangle :: Type -> String
 typeMangle (TNamed n) = n
+typeMangle (TArray t) = '@' : typeMangle t
 typeMangle (TFunction tRet ts) = "\\" ++ typeMangle tRet ++ "(" ++ intercalate "," (map typeMangle ts) ++ ")"
 
 

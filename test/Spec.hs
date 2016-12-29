@@ -106,6 +106,18 @@ main = hspec $ do
                     ++ "// This is also a comment.\n"
                     ++ "void bar() {} // And this is a comment, too!"
 
+        it "parses expressions with arrays" $
+            parsesOK $ makeFun "array[123];"
+
+        it "parses multi-dimensional array expressions" $
+            parsesOK $ makeFun "array[1][2][3];"
+
+        it "parses simple array types" $
+            parsesOK $ makeFun "int[] array;"
+
+        it "parses multi-dimensional array types" $
+            parsesOK $ makeFun "int[][][] chunk;"
+
         -- Incorrect programs
         it "refuses unmatched function curly braces" $
             parsesBad "void foo() {"
@@ -206,6 +218,19 @@ main = hspec $ do
 
         it "does not take into account function declaration order" $
             tcOK "int foo() { return bar(); } int bar() { return foo(); }"
+
+        it "typechecks array expressions" $
+            tcOK $ makeFun "int[] tab; int y = tab[0] + tab[1];"
+
+        it "refuses indexing an array with a non-int" $
+            tcBad $ makeFun "int[] tab; tab[\"two\"];"
+
+        it "typechecks multi-dimensional arrays" $
+            tcOK . makeFun $
+                   "int[][][] chunk;"
+                ++ "int[][] slice = chunk[0];"
+                ++ "int[] row = slice[0];"
+                ++ "int corner = chunk[0][0][0];"
 
         it "refuses unknown types" $
             tcBad "thingamajig foo(whatsamacallit x) {}"

@@ -10,6 +10,7 @@ import Data.Maybe
 
 import AST
 import Utility
+import SpecialFunctions
 
 
 type TypeCheckMonad = StateT Context (Except String)
@@ -158,33 +159,7 @@ defaultContext = Context { returnType       = tVoid
 
 
 defaultVariableTypeInfo = M.fromList []
-defaultFunctionTypeInfo = M.fromList [ (("+",  [tInt,    tInt]),    tInt)
-                                     , (("+",  [tString, tString]), tString)
-                                     , (("-",  [tInt,    tInt]),    tInt)
-                                     , (("*",  [tInt,    tInt]),    tInt)
-                                     , (("/",  [tInt,    tInt]),    tInt)
-                                     , (("%",  [tInt,    tInt]),    tInt)
-                                     , (("&&", [tBool,   tBool]),   tBool)
-                                     , (("||", [tBool,   tBool]),   tBool)
-                                     , (("==", [tBool,   tBool]),   tBool)
-                                     , (("==", [tInt,    tInt]),    tBool)
-                                     , (("==", [tString, tString]), tBool)
-                                     , (("!=", [tBool,   tBool]),   tBool)
-                                     , (("!=", [tInt,    tInt]),    tBool)
-                                     , (("!=", [tString, tString]), tBool)
-                                     , (("<",  [tInt,    tInt]),    tBool)
-                                     , (("<=", [tInt,    tInt]),    tBool)
-                                     , ((">",  [tInt,    tInt]),    tBool)
-                                     , ((">=", [tInt,    tInt]),    tBool)
-
-                                     , (("-",  [tInt]),  tInt)
-                                     , (("!",  [tBool]), tBool)
-                                     ]
--- defaultContext = Context { returnType             = TNamed "void"
---                          , blockID                = 0
---                          , definitionLocationInfo = M.empty
---                          , typeInfo               = M.empty
---                          }
+defaultFunctionTypeInfo = M.fromList []
 
 
 mangleVariable :: Identifier -> TypeCheckMonad MangledIdentifier
@@ -197,9 +172,16 @@ mangleVariable i = do
 
 mangleFunction :: Identifier -> [Type] -> TypeCheckMonad MangledIdentifier
 mangleFunction i tArgs = do
-    fti <- gets functionTypeInfo
-    case M.lookup (i, tArgs) fti of
-        Nothing   -> throwError $ "Unknown function overload: "
-                        ++ show i ++ " with args " ++ show tArgs
-        Just tRet -> return $ MangledIdentifier i (TFunction tRet tArgs) [0]
+    -- Check if it is a special function
+    tRet <- do
+        spec <- returnTypeOfSpecialFunction i tArgs
+        case spec of
+            Just t -> return t
+            Nothing -> do
+                fti <- gets functionTypeInfo
+                case M.lookup (i, tArgs) fti of
+                    Nothing   -> throwError $ "Unknown function: "
+                                    ++ show i ++ " with args " ++ show tArgs
+                    Just t    -> return t
+    return $ MangledIdentifier i (TFunction tRet tArgs) [0]
 
