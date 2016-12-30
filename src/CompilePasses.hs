@@ -15,17 +15,19 @@ import Parser
 import TypeCheck
 -- import RenameUnique
 import GenerateSSA
+import CodeGen.Dumb
 
 
 compile :: String -> Either String String
 compile = lexAndParse
       >=> typeCheck
-      >=> astToSSA
-      >=> \m ->
-            let els = M.assocs m
-                alles = flip map els $ \(name, stmts) ->
-                        show name ++ ":\n\t" ++ intercalate "\n\t" (map show stmts)
-            in return $ intercalate "\n\n" alles
+      >=> astToAsm
+--       >=> astToSSA
+--       >=> \m ->
+--             let els = M.assocs m
+--                 alles = flip map els $ \(name, stmts) ->
+--                         show name ++ ":\n\t" ++ intercalate "\n\t" (map show stmts)
+--             in return $ intercalate "\n\n" alles
 
 
 lexAndParse :: String -> Either String Program

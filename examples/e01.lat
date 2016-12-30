@@ -1,9 +1,5 @@
 // A non-trivial example #2
 
-void printInt(int i) {
-    // Something happens here...
-}
-
 int main() {
     int a = 0;
     int b = 1;
@@ -12,7 +8,7 @@ int main() {
         printInt(b);
         int tmp = a;
         a = b;
-        b = b + a;
+        b = b + tmp;
     }
 }
 
