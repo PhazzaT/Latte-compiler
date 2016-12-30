@@ -40,6 +40,7 @@ import Lexer
     else        { Token TokElse _ }
     while       { Token TokWhile _ }
     return      { Token TokReturn _ }
+    new         { Token TokNew _ }
 
     -- Literals
     identifier      { Token (TokIdentifier $$) _ }
@@ -50,6 +51,7 @@ import Lexer
     -- Symbols
     ';'             { Token TokSemicolon _ }
     ','             { Token TokComma _ }
+    '.'             { Token TokDot _ }
     '('             { Token TokOpenParen _ }
     ')'             { Token TokCloseParen _ }
     '['             { Token TokOpenSquare _ }
@@ -121,6 +123,32 @@ Item : Identifier          { Item $1 Nothing }
 
 -- Expressions --
 
+-- Based on official Java syntax
+ExprPrimary :: { Expr }
+ExprPrimary : ExprPrimaryNoNewArray { $1 }
+            | ExprArrayCreation     { $1 }
+
+ExprPrimaryNoNewArray :: { Expr }
+ExprPrimaryNoNewArray : ExprLiteral     { $1 }
+                      | ExprArrayAccess { $1 }
+                      | ExprFieldAccess { $1 }
+                      | '(' Expr ')'    { $2 }
+
+ExprLiteral :: { Expr }
+ExprLiteral : stringLiteral { EString $1 }
+            | boolLiteral   { EBoolLiteral $1 }
+            | intLiteral    { EIntLiteral $1 }
+
+ExprArrayAccess :: { Expr }
+ExprArrayAccess : Identifier '[' Expr ']'            { EApp "[]" [EVar $1, $3] }
+                | ExprPrimaryNoNewArray '[' Expr ']' { EApp "[]" [$1, $3] }
+
+ExprFieldAccess :: { Expr }
+ExprFieldAccess : Expr6 '.' Identifier { EApp ('.' : $3) [$1] }
+
+ExprArrayCreation :: { Expr }
+ExprArrayCreation : new Identifier '[' Expr ']' ArrayMarks { ENew (timesArray ($6 + 1) (TNamed $2)) [$4] }
+
 Expr :: { Expr }
 Expr : Expr1 '||' Expr { EApp "||" [$1, $3] }
      | Expr1           { $1 }
@@ -141,15 +169,9 @@ Expr5 : '!' Expr6 { EApp "!" [$2] }
       | '-' Expr6 { EApp "-" [$2] }
       | Expr6     { $1 }
 Expr6 :: { Expr }
-Expr6 : stringLiteral                         { EString $1 }
-      | Identifier '(' listSep(Expr, ',') ')' { EApp $1 $3 }
-      | boolLiteral                           { EBoolLiteral $1 }
-      | intLiteral                            { EIntLiteral $1 }
-      | Identifier list(ArrayIndex)           { foldl (\a x -> EApp "[]" [a, x]) (EVar $1) $2 }
-      | '(' Expr ')'                          { $2 }
-ArrayIndex :: { Expr }
-ArrayIndex : '[' Expr ']' { $2 }
-
+Expr6 : Identifier '(' listSep(Expr, ',') ')' { EApp $1 $3 }
+      | Identifier                            { EVar $1 }
+      | ExprPrimary                           { $1 }
 
 -- Operators --
 
@@ -174,12 +196,16 @@ RelOp : '<'  { Less }
 -- Others --
 
 ArrayMarks :: { Int }
-ArrayMarks :                   { 0 }
-          | '[' ']' ArrayMarks { $3 + 1 }
+ArrayMarks :                    { 0 }
+           | '[' ']' ArrayMarks { $3 + 1 }
+
+-- TypeSimple :: { Type }
+-- TypeSimple : Identifier { TNamed $1 }
+-- TODO: Change "identifier" to something more sensible
+
 
 Type :: { Type }
-Type : Identifier ArrayMarks { iterate TArray (TNamed $1) !! $2 }
--- TODO: Change "identifier" to something more sensible
+Type : Identifier ArrayMarks { timesArray $2 (TNamed $1) }
 
 
 Identifier :: { Identifier }
@@ -218,5 +244,8 @@ parseError [] = throwError "Parse error - unexpected end of file"
 
 parse :: [Token] -> Either String Program
 parse s = evalStateT (parseInner s) (globalScopeID + 1)
+
+timesArray :: Int -> Type -> Type
+timesArray n t = iterate TArray t !! n
 }
 

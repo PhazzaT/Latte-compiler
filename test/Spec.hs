@@ -109,6 +109,9 @@ main = hspec $ do
         it "parses expressions with arrays" $
             parsesOK $ makeFun "array[123];"
 
+        it "parses array creation expressions" $
+            parsesOK $ makeFun "new int[1][];"
+
         it "parses multi-dimensional array expressions" $
             parsesOK $ makeFun "array[1][2][3];"
 
@@ -117,6 +120,9 @@ main = hspec $ do
 
         it "parses multi-dimensional array types" $
             parsesOK $ makeFun "int[][][] chunk;"
+
+        it "parses array length expression" $
+            parsesOK $ makeFun "int[] arr; int l = arr.length;"
 
         -- Incorrect programs
         it "refuses unmatched function curly braces" $
@@ -221,6 +227,12 @@ main = hspec $ do
 
         it "typechecks array expressions" $
             tcOK $ makeFun "int[] tab; int y = tab[0] + tab[1];"
+
+        it "typechecks array new expressions" $
+            tcOK $ makeFun "int x = (new int[1][][])[1][2][3];"
+
+        it "enforces int type as array length" $
+            tcOK $ makeFun "int[] tab = new int[5]; printInt(tab.length);"
 
         it "refuses indexing an array with a non-int" $
             tcBad $ makeFun "int[] tab; tab[\"two\"];"

@@ -13,7 +13,9 @@ type LookupFun = forall m. (MonadError String m) => Identifier -> [Type] -> Mayb
 
 returnTypeOfSpecialFunction :: (MonadError String m) => Identifier -> [Type] -> m (Maybe Type)
 returnTypeOfSpecialFunction f args = runMaybeT . msum . map (\fn -> fn f args) $
-        [checkSimpleOperators, checkEqualityOperators, checkArrayLookupOperator]
+        [ checkSimpleOperators, checkEqualityOperators
+        , checkArrayLookupOperator, checkGetFieldOperator
+        ]
 
 
 checkSimpleOperators :: LookupFun
@@ -61,6 +63,12 @@ checkArrayLookupOperator "[]" [tArr, tInd] = do
         TArray tInner -> breakWith tInner
         _             -> throwError $ show tArr ++ " is not an array type"
 checkArrayLookupOperator _ _ = continue
+
+
+checkGetFieldOperator :: LookupFun
+checkGetFieldOperator ".length" [TArray _] = breakWith tInt
+checkGetFieldOperator ('.':_) [] = throwError "Object fields are not implemented yet!"
+checkGetFieldOperator _ _ = continue
 
 
 enumerateList :: (Show a) => [a] -> String

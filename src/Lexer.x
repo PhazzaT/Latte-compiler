@@ -24,6 +24,7 @@ tokens :-
     "else"      { simpleTok TokElse }
     "while"     { simpleTok TokWhile }
     "return"    { simpleTok TokReturn }
+    "new"       { simpleTok TokNew }
 
     -- Literals
     "true"                               { simpleTok $ TokBoolLiteral True }
@@ -35,6 +36,7 @@ tokens :-
     -- Symbols
     ";"         { simpleTok TokSemicolon }
     ","         { simpleTok TokComma }
+    "."         { simpleTok TokDot }
     "("         { simpleTok TokOpenParen }
     ")"         { simpleTok TokCloseParen }
     "["         { simpleTok TokOpenSquare }
@@ -66,12 +68,14 @@ data TokenData = TokIf
                | TokElse
                | TokWhile
                | TokReturn
+               | TokNew
                | TokIdentifier String
                | TokIntLiteral Integer
                | TokStrLiteral String
                | TokBoolLiteral Bool
                | TokSemicolon
                | TokComma
+               | TokDot
                | TokOpenParen
                | TokCloseParen
                | TokOpenSquare

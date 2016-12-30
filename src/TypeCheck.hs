@@ -96,15 +96,20 @@ typeCompare t1 t2 = when (t1 /= t2) $
 
 
 btiExpr :: Expr -> TypeCheckMonad (ExprTyped, Type)
-btiExpr (EString s)       = return (EString s, tString)
-btiExpr (EApp ident args) = do
+btiExpr (EString s)           = return (EString s, tString)
+btiExpr (EApp ident args)     = do
     (args', tArgs) <- unzip <$> mapM btiExpr args
     ident' <- mangleFunction ident tArgs
     let TFunction tRet _ = identifierType ident'
     return (EApp ident' args', tRet)
-btiExpr (EBoolLiteral b)  = return (EBoolLiteral b, tBool)
-btiExpr (EIntLiteral i)   = return (EIntLiteral i, tInt)
-btiExpr (EVar ident)      = do
+btiExpr (EBoolLiteral b)      = return (EBoolLiteral b, tBool)
+btiExpr (EIntLiteral i)       = return (EIntLiteral i, tInt)
+btiExpr (ENew t@(TArray _) [e]) = do
+    (e', te) <- btiExpr e
+    typeCompare tInt te
+    return (e', t)
+btiExpr (ENew _ _)            = throwError "Objects are not supported yet!"
+btiExpr (EVar ident)          = do
     ident' <- mangleVariable ident
     return (EVar ident', identifierType ident')
 

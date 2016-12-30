@@ -40,6 +40,7 @@ data ExprF i = EString String
              | EApp i [ExprF i]
              | EBoolLiteral Bool
              | EIntLiteral Integer
+             | ENew Type [ExprF i]
              | EVar i
              deriving (Eq, Data, Typeable, Show)
 type Expr = ExprF Identifier
