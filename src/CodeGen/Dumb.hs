@@ -228,13 +228,21 @@ functionCallDirect ident args = do
     forM_ (take argNum registersForArguments) $ \reg ->
         tellI1 Push reg
 
+    -- Reserve space for arguments, if neccessary
+    let argSpace = max 0 $ length args - 6
+    when (argSpace > 0) $
+        tellI2 Sub RSP (fromIntegral argSpace * 8 :: Int64)
+
     -- Push arguments on stack or move to registers
     let methods = map (\r -> tellI2 Mov r RAX) registersForArguments
-                    ++ repeat (tellI1 Push RAX)
+                    ++ map (\i -> tellI2 Mov (QWORD [RSP ^+ (i * 8 :: Int64)]) RAX) [0..]
     forM_ (zip methods args) $ \(method, e) ->
         generateExpression e >> method
 
     tellI1 Call (ArgumentLabel ident)
+
+    when (argSpace > 0) $
+        tellI2 Add RSP (fromIntegral argSpace * 8 :: Int64)
 
     -- Restore registers
     forM_ (reverse $ take argNum registersForArguments) $ \reg ->
@@ -265,7 +273,7 @@ varBaseLoc ident = do
     case mArgOffset of
         Just off -> return $ if off < 6
                                 then toArgument $ registersForArguments !! off
-                                else toArgument $ QWORD [RBP ^+ (fromIntegral off * 8 + 16 :: Int64)]
+                                else toArgument $ QWORD [RBP ^+ (fromIntegral (off - 6) * 8 + 16 :: Int64)]
         Nothing -> do
             Just offset <- asks (elemIndex ident . contextStackVariables)
             return . toArgument $ QWORD [RBP ^+ negate (fromIntegral offset * 8 + 8 :: Int64)]
