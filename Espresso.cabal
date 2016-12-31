@@ -24,6 +24,9 @@ library
                      , Utility
                      , GenerateSSA
                      , SpecialFunctions
+                     , CodeGen.Assembly
+                     , CodeGen.AssemblyFormatters
+                     , CodeGen.AssemblyFormatters.Nasm
                      , CodeGen.Dumb
   build-depends:       base >= 4.7 && < 5
                      , mtl

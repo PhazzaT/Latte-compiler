@@ -16,12 +16,13 @@ import TypeCheck
 -- import RenameUnique
 import GenerateSSA
 import CodeGen.Dumb
+import CodeGen.AssemblyFormatters.Nasm
 
 
 compile :: String -> Either String String
 compile = lexAndParse
       >=> typeCheck
-      >=> astToAsm
+      >=> astToAsm nasmFormatter
 --       >=> astToSSA
 --       >=> \m ->
 --             let els = M.assocs m
