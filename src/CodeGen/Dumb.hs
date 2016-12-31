@@ -5,6 +5,7 @@ import Control.Monad.Except
 import Control.Monad.Reader
 import Control.Monad.State
 import Control.Monad.Writer
+import Data.Int
 import Data.List
 import Data.Maybe
 
@@ -47,7 +48,7 @@ boilerplate = do
 
 generateFunction :: FnDefTyped -> Mo ()
 generateFunction (FnDef tRet ident args stmt) = do
-    tellLabel $ (ArgumentLabel $ identifierLabel ident)
+    tellLabel (ArgumentLabel $ identifierLabel ident)
     tellI1 Push RBP
     tellI2 Mov RBP RSP
     Context _ _ fmtr <- ask
@@ -61,11 +62,11 @@ generateStatement :: StmtTyped -> Mo ()
 generateStatement (Block bid stms) = do
     let locals = getLocalNames stms
     unless (null locals) $
-        tellI2 Sub RSP (length locals * 8)
+        tellI2 Sub RSP (fromIntegral $ length locals * 8 :: Int64)
     local (\(Context a b fmtr) -> Context a (b ++ locals) fmtr) $
         mapM_ generateStatement stms
     unless (null locals) $
-        tellI2 Add RSP (length locals * 8)
+        tellI2 Add RSP (fromIntegral $ length locals * 8 :: Int64)
 
 generateStatement (Assign e1 e2) = do
     generateLValue e1
@@ -77,7 +78,7 @@ generateStatement (Assign e1 e2) = do
 generateStatement (Decl t items) = do
     let work (Item ident Nothing) = do
             loc <- varBaseLoc ident
-            tellI2 Mov loc (0 :: Int)
+            tellI2 Mov loc (0 :: Int64)
         work (Item ident (Just e)) = do
             generateExpression e
             loc <- varBaseLoc ident
@@ -140,9 +141,9 @@ generateExpression (EVar ident) = do
     loc <- varBaseLoc ident
     tellI2 Mov RAX loc
 generateExpression (EString s) = throwError "Strings are not supported yet!"
-generateExpression (EBoolLiteral True) = tellI2 Mov RAX (1 :: Int)
+generateExpression (EBoolLiteral True) = tellI2 Mov RAX (1 :: Int64)
 generateExpression (EBoolLiteral False) = tellI2 Xor RAX RAX
-generateExpression (EIntLiteral i) = tellI2 Mov RAX (fromInteger i :: Int)
+generateExpression (EIntLiteral i) = tellI2 Mov RAX (fromInteger i :: Int64)
 generateExpression (ENew _ es) = functionCallDirect "__alloc_array" es
 
 
@@ -155,7 +156,7 @@ generateLValue (EApp ident [e1, e2])
     | identifierLabel ident == "[]" = do
         calcTwoArguments e1 e2
         checkArrayBounds
-        tellI2 Lea RAX $ QWORD [RCX ^+ (8 :: Int) ^* RAX ^+ (8 :: Int)]
+        tellI2 Lea RAX $ QWORD [RCX ^+ (8 :: Int64) ^* RAX ^+ (8 :: Int64)]
 generateLValue _ = throwError "Expression is not a lvalue"
 
 
@@ -166,7 +167,7 @@ functionCall ident [e]
         tellI1 Neg RAX
     | identifierLabel ident == "!" = do
         generateExpression e
-        tellI2 Xor RAX (1 :: Int)
+        tellI2 Xor RAX (1 :: Int64)
     | identifierLabel ident == ".length" = do
         generateExpression e
         tellI2 Mov RAX $ QWORD [toArgument RAX]
@@ -198,7 +199,7 @@ functionCall ident [e1, e2]
                 , ("<", L),  ("<=", LE)
                 , (">", G),  (">=", GE)]
         tellI1 (Set flag) AL
-        tellI2 And RAX (0xFF :: Int)
+        tellI2 And RAX (0xFF :: Int64)
     | identifierLabel ident == "&&" = do
         l <- nextTmpLabel
         generateExpression e1
@@ -216,7 +217,7 @@ functionCall ident [e1, e2]
     | identifierLabel ident == "[]" = do
         calcTwoArguments e1 e2
         checkArrayBounds
-        tellI2 Mov RAX $ QWORD [RCX ^+ (8 :: Int) ^* RAX ^+ (8 :: Int)]
+        tellI2 Mov RAX $ QWORD [RCX ^+ (8 :: Int64) ^* RAX ^+ (8 :: Int64)]
 functionCall ident args = functionCallDirect (identifierLabel ident) args
 
 
@@ -264,10 +265,10 @@ varBaseLoc ident = do
     case mArgOffset of
         Just off -> return $ if off < 6
                                 then toArgument $ registersForArguments !! off
-                                else toArgument $ QWORD [RBP ^+ (off * 8 + 16 :: Int)]
+                                else toArgument $ QWORD [RBP ^+ (fromIntegral off * 8 + 16 :: Int64)]
         Nothing -> do
             Just offset <- asks (elemIndex ident . contextStackVariables)
-            return . toArgument $ QWORD [RBP ^+ negate (offset * 8 + 8 :: Int)]
+            return . toArgument $ QWORD [RBP ^+ negate (fromIntegral offset * 8 + 8 :: Int64)]
 
 
 registersForArguments :: [Register]

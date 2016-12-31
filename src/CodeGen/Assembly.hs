@@ -8,7 +8,7 @@ data Register
     | EAX | ECX | EDX | EBX | ESI | EDI | ESP | EBP
     | AX  | CX  | DX  | BX  | SI  | DI  | SP  | BP
     | AL  | CL  | DL  | BL
-    deriving (Eq, Ord)
+    deriving (Eq, Ord, Show)
 
 data Switch
     = E | NE | Z | NZ
@@ -51,17 +51,14 @@ data Instruction
 
 data Argument
     = ArgumentRegister Register
-    | Argument8 Int8
-    | Argument16 Int16
-    | Argument32 Int32
-    | Argument64 Int64
+    | ArgumentInteger OperandSize Integer
     | ArgumentAddress OperandSize Argument
     | ArgumentAdd Argument Argument
     | ArgumentMul Argument Argument
     | ArgumentLabel String
-    deriving (Eq, Ord)
+    deriving (Eq, Ord, Show)
 
-data OperandSize = Size8 | Size16 | Size32 | Size64 deriving (Eq, Ord)
+data OperandSize = Size8 | Size16 | Size32 | Size64 deriving (Eq, Ord, Show)
 data AddressForm = BYTE [Argument] | WORD [Argument] | DWORD [Argument] | QWORD [Argument]
 
 -- A helper class used to implement Intel syntax-like DSL
@@ -71,14 +68,28 @@ class ToArgument a where
 instance ToArgument Argument where
     toArgument = id
 
-instance ToArgument Int where
-    toArgument i = 
-        let checkSize s = -2^s <= i && i < 2^s
-         in if      checkSize 8  then Argument8  $ fromIntegral i
-            else if checkSize 16 then Argument16 $ fromIntegral i
-            else if checkSize 32 then Argument32 $ fromIntegral i
-            else if checkSize 64 then Argument64 $ fromIntegral i
-            else error "Integral size too big to represent as offset"
+-- instance ToArgument Int where
+--     toArgument i = 
+--         let checkSize s = -2^s <= i && i < 2^s
+--             size 
+--               | checkSize 8  = Size8
+--               | checkSize 16 = Size16
+--               | checkSize 32 = Size32
+--               | checkSize 64 = Size64
+--               | otherwise    = error "Integral size too big to be represented as offset"
+--         in ArgumentInteger size $ fromIntegral i
+
+instance ToArgument Int8 where
+    toArgument = ArgumentInteger Size8 . fromIntegral
+
+instance ToArgument Int16 where
+    toArgument = ArgumentInteger Size16 . fromIntegral
+
+instance ToArgument Int32 where
+    toArgument = ArgumentInteger Size32 . fromIntegral
+
+instance ToArgument Int64 where
+    toArgument = ArgumentInteger Size64 . fromIntegral
 
 instance ToArgument Register where
     toArgument = ArgumentRegister

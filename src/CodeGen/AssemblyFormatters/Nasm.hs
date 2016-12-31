@@ -30,10 +30,7 @@ convert (I2 o a1 a2) = opToString o ++ " " ++ argumentToString a1 ++ ", " ++ arg
 
 argumentToString :: Argument -> String
 argumentToString (ArgumentRegister r)       = registerToString r
-argumentToString (Argument8 i)              = show i
-argumentToString (Argument16 i)             = show i
-argumentToString (Argument32 i)             = show i
-argumentToString (Argument64 i)             = show i
+argumentToString (ArgumentInteger _ i)      = show i
 argumentToString (ArgumentAddress Size8 a)  = "BYTE [" ++ argumentToString a ++ "]"
 argumentToString (ArgumentAddress Size16 a) = "WORD [" ++ argumentToString a ++ "]"
 argumentToString (ArgumentAddress Size32 a) = "DWORD [" ++ argumentToString a ++ "]"
