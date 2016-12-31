@@ -49,11 +49,11 @@ btiProgram (Program fns) = do
 
 
 btiStmt :: Stmt -> TypeCheckMonad StmtTyped
-btiStmt (Assign ident e)       = do
-    ident' <- mangleVariable ident
-    (e', te) <- btiExpr e
-    typeCompare (identifierType ident') te
-    return $ Assign ident' e'
+btiStmt (Assign e1 e2)         = do
+    (e1', te1) <- btiExpr e1
+    (e2', te2) <- btiExpr e2
+    typeCompare te1 te2
+    return $ Assign e1' e2'
 btiStmt (Block bid stmts)      = withBlock bid $ Block bid <$> mapM btiStmt stmts
 btiStmt (Decl t items)         = Decl t <$> mapM (btiItem t) items
 btiStmt Empty                  = return Empty
@@ -107,7 +107,7 @@ btiExpr (EIntLiteral i)       = return (EIntLiteral i, tInt)
 btiExpr (ENew t@(TArray _) [e]) = do
     (e', te) <- btiExpr e
     typeCompare tInt te
-    return (e', t)
+    return (ENew t [e'], t)
 btiExpr (ENew _ _)            = throwError "Objects are not supported yet!"
 btiExpr (EVar ident)          = do
     ident' <- mangleVariable ident

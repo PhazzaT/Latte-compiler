@@ -19,7 +19,7 @@ data ArgF i = Arg Type i deriving (Eq, Data, Typeable, Show)
 type Arg = ArgF Identifier
 type ArgTyped = ArgF MangledIdentifier
 
-data StmtF i = Assign i (ExprF i)
+data StmtF i = Assign (ExprF i) (ExprF i)
              | Block BlockID [StmtF i]
              | Decl Type [ItemF i]
              | Empty

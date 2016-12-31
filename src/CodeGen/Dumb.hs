@@ -29,6 +29,8 @@ boilerplate = do
     -- tellLn "global _start"
     tellLn "global main"
     tellLn "extern printInt"
+    tellLn "extern __alloc_array"
+    tellLn "extern error"
     tellLn "section .text"
 
     -- tellLn "_start:"
@@ -59,10 +61,12 @@ generateStatement (Block bid stms) = do
     unless (null locals) $
         tellLn $ "add rsp, " ++ show (length locals * 8)
 
-generateStatement (Assign ident e) = do
-    loc <- varBaseLoc ident
-    generateExpression e
-    tellLn $ "mov " ++ loc ++ ", rax"
+generateStatement (Assign e1 e2) = do
+    generateLValue e1
+    tellLn   "push rax"
+    generateExpression e2
+    tellLn   "pop rcx"
+    tellLn   "mov [rcx], eax"
 
 generateStatement (Decl t items) = do
     let work (Item ident Nothing) = do
@@ -133,6 +137,20 @@ generateExpression (EString s) = throwError "Strings are not supported yet!"
 generateExpression (EBoolLiteral True) = tellLn "mov rax, 1"
 generateExpression (EBoolLiteral False) = tellLn "xor rax, rax"
 generateExpression (EIntLiteral i) = tellLn $ "mov rax, " ++ show i
+generateExpression (ENew _ es) = functionCallDirect "__alloc_array" es
+
+
+generateLValue :: ExprTyped -> Mo ()
+generateLValue (EVar ident) = do
+    loc <- varBaseLoc ident
+    tellLn $ "lea rax, " ++ loc
+
+generateLValue (EApp ident [e1, e2])
+    | identifierLabel ident == "[]" = do
+        calcTwoArguments e1 e2
+        checkArrayBounds
+        tellLn   "lea rax, [rcx + 8 * rax + 8]"
+generateLValue _ = throwError "Expression is not a lvalue"
 
 
 functionCall :: MangledIdentifier -> [ExprTyped] -> Mo ()
@@ -143,6 +161,9 @@ functionCall ident [e]
     | identifierLabel ident == "!" = do
         generateExpression e
         tellLn   "xor rax, 1"
+    | identifierLabel ident == ".length" = do
+        generateExpression e
+        tellLn   "mov rax, [rax]"
 functionCall ident [e1, e2]
     | identifierLabel ident `elem` ["+", "-"] = do
         calcTwoArguments e1 e2
@@ -168,9 +189,10 @@ functionCall ident [e1, e2]
         tellLn   "cmp rcx, rax"
         let flag = fromJust $ lookup (identifierLabel ident)
                 [ ("==", "e"), ("!=", "ne")
-                , ("<", "g"), ("<=", "ge")
-                , (">", "l"), (">=", "le")]
-        tellLn $ "set" ++ flag ++ " rax"
+                , ("<", "l"), ("<=", "le")
+                , (">", "g"), (">=", "ge")]
+        tellLn $ "set" ++ flag ++ " al"
+        tellLn   "and rax, 0xFF"
     | identifierLabel ident == "&&" = do
         l <- nextTmpLabel
         generateExpression e1
@@ -185,10 +207,15 @@ functionCall ident [e1, e2]
         tellLn $ "jnz " ++ l
         generateExpression e2
         tellLn $ l ++ ":"
-    | identifierLabel ident == "[]" =
-        -- TODO: Checking bounds
-        throwError "Arrays are not fully implemented yet!"
-functionCall ident args = do
+    | identifierLabel ident == "[]" = do
+        calcTwoArguments e1 e2
+        checkArrayBounds
+        tellLn   "mov rax, [rcx + 8 * rax + 8]"
+functionCall ident args = functionCallDirect (identifierLabel ident) args
+
+
+functionCallDirect :: String -> [ExprTyped] -> Mo ()
+functionCallDirect ident args = do
     -- Need to preserve registers containing arguments of current function
     argNum <- asks (length . contextFunctionArguments)
     forM_ (take argNum registersForArguments) $ \reg ->
@@ -200,7 +227,7 @@ functionCall ident args = do
     forM_ (zip methods args) $ \(method, e) ->
         generateExpression e >> tellLn method
 
-    tellLn $ "call " ++ identifierLabel ident
+    tellLn $ "call " ++ ident
 
     -- Restore registers
     forM_ (reverse $ take argNum registersForArguments) $ \reg ->
@@ -209,10 +236,15 @@ functionCall ident args = do
 
 calcTwoArguments :: ExprTyped -> ExprTyped -> Mo ()
 calcTwoArguments e1 e2 = do
-        generateExpression e1
-        tellLn   "push rax"
-        generateExpression e2
-        tellLn   "pop rcx"
+    generateExpression e1
+    tellLn   "push rax"
+    generateExpression e2
+    tellLn   "pop rcx"
+
+checkArrayBounds :: Mo ()
+checkArrayBounds = do
+    tellLn   "cmp [rcx], rax"
+    tellLn   "jbe error"
 
 
 nextTmpLabel :: Mo String

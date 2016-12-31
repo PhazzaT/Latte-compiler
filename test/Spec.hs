@@ -124,6 +124,9 @@ main = hspec $ do
         it "parses array length expression" $
             parsesOK $ makeFun "int[] arr; int l = arr.length;"
 
+        it "parses array assignment" $
+            parsesOK $ makeFun "arr[42] = 16;"
+
         -- Incorrect programs
         it "refuses unmatched function curly braces" $
             parsesBad "void foo() {"

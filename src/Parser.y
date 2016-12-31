@@ -105,9 +105,9 @@ Stmt : Type listSepNEmpty(Item, ',') ';' { Decl $1 $2 }
 
 Stmt1 :: { Stmt }
 Stmt1 : ';'                              { Empty }
-      | Identifier '=' Expr ';'          { Assign $1 $3 }
-      | Identifier '++' ';'              { Assign $1 (EApp "+" [EVar $1, EIntLiteral 1]) }
-      | Identifier '--' ';'              { Assign $1 (EApp "-" [EVar $1, EIntLiteral 1]) }
+      | Expr '=' Expr ';'                { Assign $1 $3 }
+--       | Expr '++' ';'                    { Assign $1 (EApp "+" [$1, EIntLiteral 1]) }
+--       | Expr '--' ';'                    { Assign $1 (EApp "-" [$1, EIntLiteral 1]) }
       | return Expr ';'                  { Return $2 }
       | return ';'                       { VReturn }
       | if '(' Expr ')' Stmt1 else Stmt1 { If $3 $5 $7 }

@@ -87,10 +87,10 @@ fixVoidFunctions = map work
 
 
 convertStmt :: AST.StmtTyped -> TAMonad [TACode]
-convertStmt (AST.Assign ident expr) = do
-    (eCode, arg) <- convertExpr expr
-    reg <- Reg <$> allocRegForVariable ident
-    return $ eCode ++ [Assign reg arg]
+convertStmt (AST.Assign expr1 expr2) = do
+    (eCode1, arg1) <- convertExpr expr1
+    (eCode2, arg2) <- convertExpr expr2
+    return $ eCode1 ++ eCode2 ++ [Assign arg1 arg2]
 convertStmt (AST.Block _ stmts)     = concat <$> mapM convertStmt stmts
 convertStmt (AST.Decl t items)      = concat <$> mapM (convertItem t) items
 convertStmt AST.Empty               = return []
