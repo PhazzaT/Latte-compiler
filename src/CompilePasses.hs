@@ -6,6 +6,7 @@ module CompilePasses ( compile
 
 import Control.Monad((>=>))
 
+import Data.Bifunctor
 import Data.List
 import qualified Data.Map as M
 
@@ -18,13 +19,13 @@ import GenerateSSA
 import CodeGen.Dumb
 import CodeGen.AssemblyFormatters.Gas
 import CodeGen.AssemblyFormatters.Nasm
+import CompileError
 
 
-compile :: String -> Either String String
+compile :: String -> Either CompileError String
 compile = lexAndParse
       >=> typeCheck
---       >=> astToAsm nasmFormatter
-      >=> astToAsm gasFormatter
+      >=> generateAssembly
 --       >=> astToSSA
 --       >=> \m ->
 --             let els = M.assocs m
@@ -33,10 +34,14 @@ compile = lexAndParse
 --             in return $ intercalate "\n\n" alles
 
 
-lexAndParse :: String -> Either String Program
-lexAndParse = tokenize >=> parse
+lexAndParse :: String -> Either CompileError Program
+lexAndParse = first parseError . (tokenize >=> parse)
 
 
-typeCheck :: Program -> Either String ProgramTyped
-typeCheck = buildTypeInformation
+typeCheck :: Program -> Either CompileError ProgramTyped
+typeCheck = first typeCheckError . buildTypeInformation
+
+
+generateAssembly :: ProgramTyped -> Either CompileError String
+generateAssembly = first codeGenerationError . astToAsm gasFormatter
 

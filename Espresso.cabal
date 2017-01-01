@@ -17,6 +17,7 @@ cabal-version:       >=1.10
 library
   hs-source-dirs:      src
   exposed-modules:     CompilePasses
+                     , CompileError
                      , AST
   other-modules:       Lexer
                      , Parser

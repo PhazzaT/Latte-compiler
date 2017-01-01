@@ -13,14 +13,17 @@ import Data.Monoid
 
 import AST
 import CompilePasses(lexAndParse, typeCheck)
+import CompileError
 
 
 main :: IO ()
 main = hspec $ do
     let makeFun s = "void foo() { " ++ s ++ " }" :: String
     describe "Parsing" $ do
+        let isParseError (Left (CompileError ParseError _)) = True
+            isParseError _ = False
         let parsesOK  s = lexAndParse s `shouldSatisfy` isRight
-        let parsesBad s = lexAndParse s `shouldNotSatisfy` isRight
+        let parsesBad s = lexAndParse s `shouldSatisfy` isParseError
 
         -- Correct programs
         it "parses empty source" $
@@ -139,10 +142,12 @@ main = hspec $ do
 
 
     describe "Type checking" $ do
+        let isTypeError (Left (CompileError TypeCheckError _)) = True
+            isTypeError _ = False
         let tFun = TFunction
         let tc = lexAndParse >=> typeCheck
         let tcOK s = tc s `shouldSatisfy` isRight
-        let tcBad s = tc s `shouldNotSatisfy` isRight
+        let tcBad s = tc s `shouldSatisfy` isTypeError
         let hasIdentifiers ids p = all (`elem` allIdents) ids
                 where
                     allIdents = everything (++) ([] `mkQ` select) p
@@ -195,7 +200,7 @@ main = hspec $ do
             tcOK $ makeFun "string s = \"The quick \" + \"brown fox...\";"
 
         it "refuses addition of wrong types" $
-            tcBad $ makeFun "42 + \"The quick brown fox...\""
+            tcBad $ makeFun "42 + \"The quick brown fox...\";"
 
         it "typechecks boolean operators" $
             tcOK $ makeFun "bool x = true || false && true;"
