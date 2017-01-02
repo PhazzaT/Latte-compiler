@@ -14,6 +14,7 @@ import Data.Monoid
 import AST
 import CompilePasses(lexAndParse, typeCheck)
 import CompileError
+import ExternalTests
 
 
 main :: IO ()
@@ -254,3 +255,7 @@ main = hspec $ do
 
         it "refuses unknown types" $
             tcBad "thingamajig foo(whatsamacallit x) {}"
+
+    describe "External tests"
+        runFileTests
+
