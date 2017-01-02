@@ -87,7 +87,7 @@ type Identifier = String
 data MangledIdentifier = MangledIdentifier { identifierLabel :: Identifier
                                            , identifierType  :: Type
                                            , identifierScope :: [BlockID]
-                                           } deriving (Eq, Data, Ord, Show)
+                                           } deriving (Eq, Data, Ord, Show, Typeable)
 
 
 globalScopeID :: BlockID

@@ -165,7 +165,10 @@ defaultContext = Context { returnType       = tVoid
 
 defaultVariableTypeInfo = M.fromList []
 defaultFunctionTypeInfo = M.fromList [ (("printInt", [tInt]), tVoid)
-                                     , (("readInt", []), tInt) ]
+                                     , (("readInt", []), tInt)
+                                     , (("printString", [tString]), tVoid)
+                                     , (("readString", []), tString)
+                                     ]
 
 
 mangleVariable :: Identifier -> TypeCheckMonad MangledIdentifier

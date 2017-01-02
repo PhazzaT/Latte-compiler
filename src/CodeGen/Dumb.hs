@@ -5,9 +5,12 @@ import Control.Monad.Except
 import Control.Monad.Reader
 import Control.Monad.State
 import Control.Monad.Writer
+import Data.Generics
 import Data.Int
 import Data.List
+import qualified Data.Map as M
 import Data.Maybe
+import qualified Data.Set as S
 
 import AST hiding (And)
 import CodeGen.Assembly
@@ -17,14 +20,21 @@ import CodeGen.AssemblyFormatters
 data Context = Context { contextFunctionArguments :: [MangledIdentifier]
                        , contextStackVariables :: [MangledIdentifier]
                        , contextAssemblyFormatter :: AssemblyFormatter
+                       , contextLiteralLabels :: M.Map String String
                        }
 type Mo = StateT Integer (WriterT String (ReaderT Context (Except String)))
 
 
 astToAsm :: AssemblyFormatter -> ProgramTyped -> Either String String
-astToAsm fmtr (Program fns) = runExcept . flip runReaderT (Context [] [] fmtr)
+astToAsm fmtr p@(Program fns) =
+    runExcept
+        . flip runReaderT (Context [] [] fmtr $ collectStringLiterals p)
         . execWriterT $ flip evalStateT 0 $ do
             boilerplate
+            literals <- asks contextLiteralLabels
+            forM_ (M.toList literals) $ \(sz, label) -> do
+                tellLabel $ ArgumentLabel label
+                tellGlobalConst $ ConstString sz
             mapM_ generateFunction fns
 
 
@@ -51,8 +61,7 @@ generateFunction (FnDef tRet ident args stmt) = do
     tellLabel (ArgumentLabel $ identifierLabel ident)
     tellI1 Push RBP
     tellI2 Mov RBP RSP
-    Context _ _ fmtr <- ask
-    local (const $ Context (map (\(Arg _ ident) -> ident) args) [] fmtr) $ do
+    local (\c -> c { contextFunctionArguments = map (\(Arg _ ident) -> ident) args }) $ do
         generateStatement stmt
         -- TODO: Only generate if function type is void
         generateStatement VReturn
@@ -63,7 +72,7 @@ generateStatement (Block bid stms) = do
     let locals = getLocalNames stms
     unless (null locals) $
         tellI2 Sub RSP (fromIntegral $ length locals * 8 :: Int64)
-    local (\(Context a b fmtr) -> Context a (b ++ locals) fmtr) $
+    local (\c -> c { contextStackVariables = contextStackVariables c ++ locals }) $
         mapM_ generateStatement stms
     unless (null locals) $
         tellI2 Add RSP (fromIntegral $ length locals * 8 :: Int64)
@@ -140,7 +149,10 @@ generateExpression (EApp ident args) = functionCall ident args
 generateExpression (EVar ident) = do
     loc <- varBaseLoc ident
     tellI2 Mov RAX loc
-generateExpression (EString s) = throwError "Strings are not supported yet!"
+generateExpression (EString s) = do
+    lits <- asks contextLiteralLabels
+    let Just label = M.lookup s lits
+    tellI2 Mov RAX $ QWORD [ArgumentLabel label]
 generateExpression (EBoolLiteral True) = tellI2 Mov RAX (1 :: Int64)
 generateExpression (EBoolLiteral False) = tellI2 Xor RAX RAX
 generateExpression (EIntLiteral i) = tellI2 Mov RAX (fromInteger i :: Int64)
@@ -172,11 +184,15 @@ functionCall ident [e]
         generateExpression e
         tellI2 Mov RAX $ QWORD [toArgument RAX]
 functionCall ident [e1, e2]
-    | identifierLabel ident `elem` ["+", "-"] = do
+    | identifierLabel ident `elem` ["+", "-"]
+    && identifierType ident == TFunction tInt [tInt, tInt] = do
         calcTwoArguments e1 e2
         fromJust $ lookup (identifierLabel ident)
             [ ("+", tellI2 Add RAX RCX)
             , ("-", tellI2 Sub RCX RAX >> tellI2 Mov RAX RCX)]
+    | identifierLabel ident == "+"
+    && identifierType ident == TFunction tString [tString, tString] =
+        functionCallDirect "__add_strings" [e1, e2]
     | identifierLabel ident == "*" = do
         calcTwoArguments e1 e2
         tellI2 Mov R10 RDX
@@ -262,6 +278,15 @@ checkArrayBounds = do
     tellI1 (J BE) (ArgumentLabel "error")
 
 
+collectStringLiterals :: ProgramTyped -> M.Map String String
+collectStringLiterals p =
+    let literals = everything S.union (S.empty `mkQ` f) p
+        f :: ExprTyped -> S.Set String
+        f (EString s) = S.singleton s
+        f _           = S.empty
+    in M.fromList $ zip (S.toList literals) $ map (\i -> "sz" ++ show i) [0..]
+
+
 nextTmpLabel :: Mo Argument
 nextTmpLabel = state $ \i -> (ArgumentLabel $ ".L" ++ show i, i + 1)
 
@@ -301,4 +326,10 @@ tellI2 op a1 a2 = tellI $ I2 op (toArgument a1) (toArgument a2)
 
 tellLabel :: Argument -> Mo ()
 tellLabel (ArgumentLabel s) = tell $ s ++ ":\n"
+
+
+tellGlobalConst :: GlobalConstant -> Mo ()
+tellGlobalConst gc = do
+    conv <- asks $ formatterConstantConverter . contextAssemblyFormatter
+    tell $ conv gc ++ "\n"
 

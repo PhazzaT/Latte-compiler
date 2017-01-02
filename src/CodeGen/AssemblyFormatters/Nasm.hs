@@ -1,5 +1,8 @@
 module CodeGen.AssemblyFormatters.Nasm(nasmFormatter) where
 
+import Data.Char
+import Data.List
+
 import CodeGen.Assembly
 import CodeGen.AssemblyFormatters
 
@@ -8,6 +11,7 @@ nasmFormatter :: AssemblyFormatter
 nasmFormatter = AssemblyFormatter { formatterName = "NASM"
                                   , formatterBoilerplate = boilerplate
                                   , formatterConverter = convert
+                                  , formatterConstantConverter = convertConstant
                                   }
 
 
@@ -27,6 +31,16 @@ convert (I2 Lea a1 (ArgumentAddress Size64 a2))
                      = opToString Lea ++ " " ++ argumentToString a1
                      ++ ", [" ++ argumentToString a2 ++ "]"
 convert (I2 o a1 a2) = opToString o ++ " " ++ argumentToString a1 ++ ", " ++ argumentToString a2
+
+
+convertConstant :: GlobalConstant -> String
+convertConstant (ConstInteger s i) = pseudoOpForSize s ++ " " ++ show i
+    where
+        pseudoOpForSize Size8  = "db"
+        pseudoOpForSize Size16 = "dw"
+        pseudoOpForSize Size32 = "dd"
+        pseudoOpForSize Size64 = "dq"
+convertConstant (ConstString s) = "db " ++ intercalate ", " (map (show . ord) s ++ ["0"])
 
 
 argumentToString :: Argument -> String

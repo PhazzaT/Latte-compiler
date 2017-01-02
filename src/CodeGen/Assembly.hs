@@ -61,6 +61,8 @@ data Argument
 data OperandSize = Size8 | Size16 | Size32 | Size64 deriving (Eq, Ord, Show)
 data AddressForm = BYTE [Argument] | WORD [Argument] | DWORD [Argument] | QWORD [Argument]
 
+data GlobalConstant = ConstInteger OperandSize [Integer] | ConstString String
+
 -- A helper class used to implement Intel syntax-like DSL
 class ToArgument a where
     toArgument :: a -> Argument

@@ -11,6 +11,7 @@ gasFormatter :: AssemblyFormatter
 gasFormatter = AssemblyFormatter { formatterName = "GAS"
                                  , formatterBoilerplate = boilerplate
                                  , formatterConverter = convert
+                                 , formatterConstantConverter = convertConstant
                                  }
 
 
@@ -27,6 +28,16 @@ convert (I0 o)       = opToString o
 convert (I1 o a)     = opToString o ++ " " ++ argumentToString a
 convert (I2 o a1 a2) = opToString o ++ instructionSuffix a1 a2 ++  " "
                      ++ argumentToString a2 ++ ", " ++ argumentToString a1
+
+
+convertConstant :: GlobalConstant -> String
+convertConstant (ConstInteger s is) = pseudoOpForSize s ++ " " ++ intercalate ", " (map show is)
+    where
+        pseudoOpForSize Size8  = ".byte"
+        pseudoOpForSize Size16 = ".short"
+        pseudoOpForSize Size32 = ".word"
+        pseudoOpForSize Size64 = ".quad"
+convertConstant (ConstString s) = ".asciz " ++ show s
 
 
 -- TODO: lea is probably wrong here
@@ -58,6 +69,7 @@ argumentToString _                          = error "Wrong top-level argument"
 
 -- TODO: This assumes the address is correct, implement checking maybe?
 addressToString :: Argument -> String
+addressToString (ArgumentLabel s) = '$' : s
 addressToString a =
     let components = let work (ArgumentAdd a1 a2) = work a1 ++ work a2
                          work aa                  = [aa]
