@@ -14,6 +14,7 @@ nasmFormatter = AssemblyFormatter { formatterName = "NASM"
 boilerplate :: String
 boilerplate = "global main\n"
            ++ "extern printInt\n"
+           ++ "extern readInt\n"
            ++ "extern __alloc_array\n"
            ++ "extern error\n"
            ++ "section .text\n"

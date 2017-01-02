@@ -27,3 +27,10 @@ void printInt(int64_t i)
     printf("%ld\n", i);
 }
 
+int64_t readInt(void)
+{
+    int64_t ret;
+    scanf("%ld", &ret);
+    return ret;
+}
+
