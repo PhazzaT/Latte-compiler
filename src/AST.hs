@@ -22,8 +22,10 @@ type ArgTyped = ArgF MangledIdentifier
 data StmtF i = Assign (ExprF i) (ExprF i)
              | Block BlockID [StmtF i]
              | Decl Type [ItemF i]
+             | Decr (ExprF i)
              | Empty
              | If (ExprF i) (StmtF i) (StmtF i)
+             | Incr (ExprF i)
              | Return (ExprF i)
              | SExpr (ExprF i)
              | VReturn

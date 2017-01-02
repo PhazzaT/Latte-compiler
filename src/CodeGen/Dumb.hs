@@ -78,11 +78,16 @@ generateStatement (Block bid stms) = do
         tellI2 Add RSP (fromIntegral $ length locals * 8 :: Int64)
 
 generateStatement (Assign e1 e2) = do
-    generateLValue e1
-    tellI1 Push RAX
-    generateExpression e2
-    tellI1 Pop RCX
-    tellI2 Mov (QWORD [toArgument RCX]) RAX
+    lval <- generateLValue e1
+    case lval of
+        Nothing -> do
+            tellI1 Push RAX
+            generateExpression e2
+            tellI1 Pop RCX
+            tellI2 Mov (QWORD [toArgument RCX]) RAX
+        Just r -> do
+            generateExpression e2
+            tellI2 Mov r RAX
 
 generateStatement (Decl t items) = do
     let work (Item ident Nothing) = do
@@ -93,6 +98,8 @@ generateStatement (Decl t items) = do
             loc <- varBaseLoc ident
             tellI2 Mov loc RAX
     mapM_ work items
+
+generateStatement (Decr e) = generateRementation Sub e
 
 generateStatement Empty = tellI0 Nop
 
@@ -109,6 +116,8 @@ generateStatement (If e s1 s2) = do
     tellLabel l2
     generateStatement s2
     tellLabel l3
+
+generateStatement (Incr e) = generateRementation Add e
 
 generateStatement (While e s) = do
     lCond <- nextTmpLabel
@@ -135,6 +144,18 @@ generateStatement VReturn = do
     tellI0 Ret
 
 
+generateRementation :: OpCode -> ExprTyped -> Mo ()
+generateRementation op e = do
+    lval <- generateLValue e
+    case lval of
+        Nothing -> do
+            tellI2 Mov RCX $ QWORD [toArgument RAX]
+            tellI2 op RCX (1 :: Int64)
+            tellI2 Mov (QWORD [toArgument RAX]) RCX
+        Just r ->
+            tellI2 op r (1 :: Int64)
+
+
 getLocalNames :: [StmtTyped] -> [MangledIdentifier]
 getLocalNames = concatMap worker
     where
@@ -159,16 +180,19 @@ generateExpression (EIntLiteral i) = tellI2 Mov RAX (fromInteger i :: Int64)
 generateExpression (ENew _ es) = functionCallDirect "__alloc_array" es
 
 
-generateLValue :: ExprTyped -> Mo ()
+generateLValue :: ExprTyped -> Mo (Maybe Register)
 generateLValue (EVar ident) = do
     loc <- varBaseLoc ident
-    tellI2 Lea RAX loc
+    case loc of
+        ArgumentRegister r -> return $ Just r
+        _                  -> tellI2 Lea RAX loc >> return Nothing
 
 generateLValue (EApp ident [e1, e2])
     | identifierLabel ident == "[]" = do
         calcTwoArguments e1 e2
         checkArrayBounds
         tellI2 Lea RAX $ QWORD [RCX ^+ (8 :: Int64) ^* RAX ^+ (8 :: Int64)]
+        return Nothing
 generateLValue _ = throwError "Expression is not a lvalue"
 
 
@@ -196,14 +220,14 @@ functionCall ident [e1, e2]
     | identifierLabel ident == "*" = do
         calcTwoArguments e1 e2
         tellI2 Mov R10 RDX
-        tellI2 Xor RDX RDX
         tellI1 Mul RCX
         tellI2 Mov RDX R10
     | identifierLabel ident `elem` ["/", "%"] = do
         calcTwoArguments e1 e2
         tellI2 Xchg RAX RCX
         tellI2 Mov R10 RDX
-        tellI1 Mul RCX
+        tellI2 Xor RDX RDX
+        tellI1 Div RCX
         when (identifierLabel ident == "%") $
             tellI2 Mov RAX RDX
         tellI2 Mov RDX R10
@@ -249,11 +273,14 @@ functionCallDirect ident args = do
     when (argSpace > 0) $
         tellI2 Sub RSP (fromIntegral argSpace * 8 :: Int64)
 
-    -- Push arguments on stack or move to registers
-    let methods = map (\r -> tellI2 Mov r RAX) registersForArguments
-                    ++ map (\i -> tellI2 Mov (QWORD [RSP ^+ (i * 8 :: Int64)]) RAX) [0..]
+    -- Push ALL arguments on stack
+    let methods = map (\r -> tellI1 Push RAX) [0..5]
+                    ++ map (\i -> tellI2 Mov (QWORD [RSP ^+ (i * 8 :: Int64)]) RAX) [6..]
     forM_ (zip methods args) $ \(method, e) ->
         generateExpression e >> method
+
+    -- Pop the first 6 arguments back into registers
+    forM_ (reverse $ take (length args) registersForArguments) (tellI1 Pop)
 
     tellI1 Call (ArgumentLabel ident)
 
@@ -297,11 +324,14 @@ varBaseLoc ident = do
     mArgOffset <- asks (elemIndex ident . contextFunctionArguments)
     case mArgOffset of
         Just off -> return $ if off < 6
-                                then toArgument $ QWORD [toArgument $ registersForArguments !! off]
+                                then toArgument $ registersForArguments !! off
                                 else toArgument $ QWORD [RBP ^+ (fromIntegral (off - 6) * 8 + 16 :: Int64)]
         Nothing -> do
-            Just offset <- asks (elemIndex ident . contextStackVariables)
-            return . toArgument $ QWORD [RBP ^+ negate (fromIntegral offset * 8 + 8 :: Int64)]
+            mOffset <- asks (elemIndex ident . contextStackVariables)
+            case mOffset of
+                Just offset ->
+                    return . toArgument $ QWORD [RBP ^+ negate (fromIntegral offset * 8 + 8 :: Int64)]
+                Nothing -> throwError $ "Identifier " ++ identifierLabel ident ++ " not found"
 
 
 registersForArguments :: [Register]

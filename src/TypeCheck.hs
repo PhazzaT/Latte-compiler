@@ -56,11 +56,19 @@ btiStmt (Assign e1 e2)         = do
     return $ Assign e1' e2'
 btiStmt (Block bid stmts)      = withBlock bid $ Block bid <$> mapM btiStmt stmts
 btiStmt (Decl t items)         = Decl t <$> mapM (btiItem t) items
+btiStmt (Decr e)               = do
+    (e', te) <- btiExpr e
+    typeCompare tInt te
+    return $ Decr e'
 btiStmt Empty                  = return Empty
 btiStmt (If cond s1 s2)        = do
     (cond', tcond) <- btiExpr cond
     typeCompare tBool tcond
     If cond' <$> btiStmt s1 <*> btiStmt s2
+btiStmt (Incr e)               = do
+    (e', te) <- btiExpr e
+    typeCompare tInt te
+    return $ Incr e'
 btiStmt (Return e)             = do
     tRet <- gets returnType
     (e', te) <- btiExpr e
