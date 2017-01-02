@@ -147,8 +147,13 @@ withReturnType = withPartialState returnType $ \t c -> c { returnType = t }
 
 withBlock :: BlockID -> TypeCheckMonad a -> TypeCheckMonad a
 withBlock bid m = do
-    blocks <- gets activeBlocks
-    withPartialState activeBlocks (\b c -> c { activeBlocks = b }) (bid : blocks) m
+    let extract c = (activeBlocks c, variableTypeInfo c)
+    (blocks, vtInfo) <- gets extract
+    withPartialState
+        extract
+        (\(b, vti) c -> c { activeBlocks = b, variableTypeInfo = vti })
+        (bid : blocks, vtInfo)
+        m
 
 
 getVariableType :: Identifier -> TypeCheckMonad Type
