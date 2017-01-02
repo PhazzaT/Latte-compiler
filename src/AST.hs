@@ -108,7 +108,7 @@ tVoid :: Type
 tVoid = TNamed "void"
 
 tBool :: Type
-tBool = TNamed "bool"
+tBool = TNamed "boolean"
 
 tString :: Type
 tString = TNamed "string"

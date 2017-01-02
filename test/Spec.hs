@@ -204,10 +204,10 @@ main = hspec $ do
             tcBad $ makeFun "42 + \"The quick brown fox...\";"
 
         it "typechecks boolean operators" $
-            tcOK $ makeFun "bool x = true || false && true;"
+            tcOK $ makeFun "boolean x = true || false && true;"
 
         it "typechecks comparison operators" $
-            tcOK $ makeFun $ "bool x = (1 < 2) && (1 <= 2) && (2 > 1) && (2 >= 1)"
+            tcOK $ makeFun $ "boolean x = (1 < 2) && (1 <= 2) && (2 > 1) && (2 >= 1)"
                                ++ " && (1 == 1) && (1 != 2);"
 
         it "enforces bool type in if expression" $

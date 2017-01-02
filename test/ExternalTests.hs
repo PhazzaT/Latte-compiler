@@ -107,12 +107,12 @@ runExample desired tc = specify ("Test case: " ++ testCaseSource tc) $ do
                             case testCaseOutput tc of
                                 Just p -> withFile p ReadMode $ \hout2 -> do
                                     let Just hout1 = mhout
-                                    s1 <- hGetContents hout1
-                                    s2 <- hGetContents hout2
+                                    s1 <- hGetContents hout1 >>= \s -> length s `seq` return s
+                                    s2 <- hGetContents hout2 >>= \s -> length s `seq` return s
                                     waitForProcess ph2
                                     if s1 == s2
                                        then return (Success, "")
-                                       else return (OutputMismatch, "")
+                                       else return (OutputMismatch, " - " ++ show s1 ++ " vs " ++ show s2)
                                 Nothing -> waitForProcess ph2 >> return (Success, "")
 
         message :: TestResult -> String

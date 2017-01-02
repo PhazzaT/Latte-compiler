@@ -272,7 +272,7 @@ varBaseLoc ident = do
     mArgOffset <- asks (elemIndex ident . contextFunctionArguments)
     case mArgOffset of
         Just off -> return $ if off < 6
-                                then toArgument $ registersForArguments !! off
+                                then toArgument $ QWORD [toArgument $ registersForArguments !! off]
                                 else toArgument $ QWORD [RBP ^+ (fromIntegral (off - 6) * 8 + 16 :: Int64)]
         Nothing -> do
             Just offset <- asks (elemIndex ident . contextStackVariables)
