@@ -25,6 +25,7 @@ library
                      , Utility
                      , GenerateSSA
                      , SpecialFunctions
+                     , StaticChecks
                      , CodeGen.Assembly
                      , CodeGen.AssemblyFormatters
                      , CodeGen.AssemblyFormatters.Gas

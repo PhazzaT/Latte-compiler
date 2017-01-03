@@ -20,11 +20,13 @@ import CodeGen.Dumb
 import CodeGen.AssemblyFormatters.Gas
 import CodeGen.AssemblyFormatters.Nasm
 import CompileError
+import StaticChecks
 
 
 compile :: String -> Either CompileError String
 compile = lexAndParse
       >=> typeCheck
+      >=> staticAnalysis
       >=> generateAssembly
 --       >=> astToSSA
 --       >=> \m ->
@@ -40,6 +42,10 @@ lexAndParse = first parseError . (tokenize >=> parse)
 
 typeCheck :: Program -> Either CompileError ProgramTyped
 typeCheck = first typeCheckError . buildTypeInformation
+
+
+staticAnalysis :: ProgramTyped -> Either CompileError ProgramTyped
+staticAnalysis p = const p <$> first staticAnalysisError (checkReturns p)
 
 
 generateAssembly :: ProgramTyped -> Either CompileError String

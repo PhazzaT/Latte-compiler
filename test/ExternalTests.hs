@@ -40,7 +40,9 @@ runFileTests = do
         baseDir = "/home/phazzat/Pobrane/lattests/"
 
     run "Good tests" "good/" [Success]
-    run "Bad tests" "bad/" [CompilationFail ParseError, CompilationFail TypeCheckError]
+    run "Bad tests" "bad/" [ CompilationFail ParseError
+                           , CompilationFail TypeCheckError
+                           , CompilationFail StaticAnalysisError ]
 
 
 runTestsInDirectory :: [TestResult] -> FilePath -> IO Spec

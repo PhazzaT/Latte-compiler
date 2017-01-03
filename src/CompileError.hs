@@ -9,6 +9,7 @@ data CompileError = CompileError CompileErrorType String deriving (Eq, Ord, Data
 data CompileErrorType
     = ParseError 
     | TypeCheckError 
+    | StaticAnalysisError
     | CodeGenerationError
     deriving (Eq, Ord, Data)
 
@@ -20,6 +21,7 @@ instance Show CompileError where
 instance Show CompileErrorType where
     show ParseError = "Parse error"
     show TypeCheckError = "Type error"
+    show StaticAnalysisError = "Static analysis error"
     show CodeGenerationError = "Code generation error"
 
 
@@ -29,6 +31,10 @@ parseError = CompileError ParseError
 
 typeCheckError :: String -> CompileError
 typeCheckError = CompileError TypeCheckError
+
+
+staticAnalysisError :: String -> CompileError
+staticAnalysisError = CompileError StaticAnalysisError
 
 
 codeGenerationError :: String -> CompileError
