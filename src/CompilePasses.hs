@@ -11,6 +11,7 @@ import Data.List
 import qualified Data.Map as M
 
 import AST
+import ASTOptimizations
 import Lexer
 import Parser
 import TypeCheck
@@ -26,6 +27,7 @@ import StaticChecks
 compile :: String -> Either CompileError String
 compile = lexAndParse
       >=> typeCheck
+      >=> return . astOptimizations
       >=> staticAnalysis
       >=> generateAssembly
 --       >=> astToSSA

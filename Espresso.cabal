@@ -31,6 +31,9 @@ library
                      , CodeGen.AssemblyFormatters.Gas
                      , CodeGen.AssemblyFormatters.Nasm
                      , CodeGen.Dumb
+                     , ASTOptimizations
+                     , ASTOptimizations.ConstantFolding
+                     , ASTOptimizations.DeadCodeElimination
   build-depends:       base >= 4.7 && < 5
                      , mtl
                      , array
