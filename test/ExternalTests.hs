@@ -36,13 +36,16 @@ data TestResult
 
 runFileTests :: Spec
 runFileTests = do
-    let run desc dir desired = describe desc $ join $ runIO $ runTestsInDirectory desired $ baseDir </> dir
-        baseDir = "/home/phazzat/Pobrane/lattests/"
+    let run desc dir desired = describe desc $ join $ runIO $ runTestsInDirectory desired dir
+        baseInternalDir = "/home/phazzat/mim/mrjp/Espresso/test_cases/"
+        baseExternalDir = "/home/phazzat/Pobrane/lattests/"
 
-    run "Good tests" "good/" [Success]
-    run "Bad tests" "bad/" [ CompilationFail ParseError
-                           , CompilationFail TypeCheckError
-                           , CompilationFail StaticAnalysisError ]
+    run "Good tests (internal)" (baseInternalDir </> "good/") [Success]
+
+    run "Good tests" (baseExternalDir </> "good/") [Success]
+    run "Bad tests" (baseExternalDir </> "bad/") [ CompilationFail ParseError
+                                                 , CompilationFail TypeCheckError
+                                                 , CompilationFail StaticAnalysisError ]
 
 
 runTestsInDirectory :: [TestResult] -> FilePath -> IO Spec
