@@ -1,0 +1,6 @@
+int main() {
+    int[] arr = new int[5];
+    printInt(arr[-1]);
+
+    return 0;
+}

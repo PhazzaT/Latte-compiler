@@ -41,6 +41,11 @@ runFileTests = do
         baseExternalDir = "/home/phazzat/Pobrane/lattests/"
 
     run "Good tests (internal)" (baseInternalDir </> "good/") [Success]
+    run "Bad tests (internal)" (baseInternalDir </> "bad/") [ CompilationFail ParseError
+                                                            , CompilationFail TypeCheckError
+                                                            , CompilationFail StaticAnalysisError ]
+    run "Fail tests (internal)" (baseInternalDir </> "fail/") [RuntimeFail]
+
 
     run "Good tests" (baseExternalDir </> "good/") [Success]
     run "Bad tests" (baseExternalDir </> "bad/") [ CompilationFail ParseError

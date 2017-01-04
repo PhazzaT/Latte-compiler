@@ -1,0 +1,14 @@
+int main() {
+    int[] arr = new int[15];
+    int i = 0;
+    while (i < arr.length) {
+        arr[i] = i;
+        i++;
+    }
+
+    for (int i : arr) {
+        printInt(i);
+    }
+
+    return 0;
+}

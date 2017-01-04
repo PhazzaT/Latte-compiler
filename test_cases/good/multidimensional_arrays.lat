@@ -1,0 +1,27 @@
+int main() {
+    int WIDTH = 4;
+    int HEIGHT = 4;
+
+    int [][] arr = new int[HEIGHT][];
+    int y = 0;
+
+    while (y < arr.length) {
+        arr[y] = new int[WIDTH];
+        int x = 0;
+
+        while (x < arr[y].length) {
+            arr[y][x] = x + 10 * y;
+            x++;
+        }
+
+        y++;
+    }
+
+    for (int[] a : arr) {
+        for (int v : a) {
+            printInt(v);
+        }
+    }
+
+    return 0;
+}
