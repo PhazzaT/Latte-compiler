@@ -83,8 +83,8 @@ generateStatement (Assign e1 e2) = do
         Nothing -> do
             tellI1 Push RAX
             generateExpression e2
-            tellI1 Pop RCX
-            tellI2 Mov (QWORD [toArgument RCX]) RAX
+            tellI1 Pop R11
+            tellI2 Mov (QWORD [toArgument R11]) RAX
         Just r -> do
             generateExpression e2
             tellI2 Mov r RAX
@@ -149,9 +149,9 @@ generateRementation op e = do
     lval <- generateLValue e
     case lval of
         Nothing -> do
-            tellI2 Mov RCX $ QWORD [toArgument RAX]
-            tellI2 op RCX (1 :: Int64)
-            tellI2 Mov (QWORD [toArgument RAX]) RCX
+            tellI2 Mov R11 $ QWORD [toArgument RAX]
+            tellI2 op R11 (1 :: Int64)
+            tellI2 Mov (QWORD [toArgument RAX]) R11
         Just r ->
             tellI2 op r (1 :: Int64)
 
@@ -191,7 +191,7 @@ generateLValue (EApp ident [e1, e2])
     | identifierLabel ident == "[]" = do
         calcTwoArguments e1 e2
         checkArrayBounds
-        tellI2 Lea RAX $ QWORD [RCX ^+ (8 :: Int64) ^* RAX ^+ (8 :: Int64)]
+        tellI2 Lea RAX $ QWORD [R11 ^+ (8 :: Int64) ^* RAX ^+ (8 :: Int64)]
         return Nothing
 generateLValue _ = throwError "Expression is not a lvalue"
 
@@ -212,28 +212,28 @@ functionCall ident [e1, e2]
     && identifierType ident == TFunction tInt [tInt, tInt] = do
         calcTwoArguments e1 e2
         fromJust $ lookup (identifierLabel ident)
-            [ ("+", tellI2 Add RAX RCX)
-            , ("-", tellI2 Sub RCX RAX >> tellI2 Mov RAX RCX)]
+            [ ("+", tellI2 Add RAX R11)
+            , ("-", tellI2 Sub R11 RAX >> tellI2 Mov RAX R11)]
     | identifierLabel ident == "+"
     && identifierType ident == TFunction tString [tString, tString] =
         functionCallDirect "__add_strings" [e1, e2]
     | identifierLabel ident == "*" = do
         calcTwoArguments e1 e2
         tellI2 Mov R10 RDX
-        tellI1 Mul RCX
+        tellI1 Mul R11
         tellI2 Mov RDX R10
     | identifierLabel ident `elem` ["/", "%"] = do
         calcTwoArguments e1 e2
-        tellI2 Xchg RAX RCX
+        tellI2 Xchg RAX R11
         tellI2 Mov R10 RDX
         tellI2 Xor RDX RDX
-        tellI1 Div RCX
+        tellI1 Div R11
         when (identifierLabel ident == "%") $
             tellI2 Mov RAX RDX
         tellI2 Mov RDX R10
     | identifierLabel ident `elem` ["==", "!=", "<", "<=", ">", ">="] = do
         calcTwoArguments e1 e2
-        tellI2 Cmp RCX RAX
+        tellI2 Cmp R11 RAX
         let flag = fromJust $ lookup (identifierLabel ident)
                 [ ("==", E), ("!=", NE)
                 , ("<", L),  ("<=", LE)
@@ -257,7 +257,7 @@ functionCall ident [e1, e2]
     | identifierLabel ident == "[]" = do
         calcTwoArguments e1 e2
         checkArrayBounds
-        tellI2 Mov RAX $ QWORD [RCX ^+ (8 :: Int64) ^* RAX ^+ (8 :: Int64)]
+        tellI2 Mov RAX $ QWORD [R11 ^+ (8 :: Int64) ^* RAX ^+ (8 :: Int64)]
 functionCall ident args = functionCallDirect (identifierLabel ident) args
 
 
@@ -297,11 +297,11 @@ calcTwoArguments e1 e2 = do
     generateExpression e1
     tellI1 Push RAX
     generateExpression e2
-    tellI1 Pop RCX
+    tellI1 Pop R11
 
 checkArrayBounds :: Mo ()
 checkArrayBounds = do
-    tellI2 Cmp (QWORD [toArgument RCX]) RAX
+    tellI2 Cmp (QWORD [toArgument R11]) RAX
     tellI1 (J BE) (ArgumentLabel "error")
 
 
