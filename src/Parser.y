@@ -41,6 +41,7 @@ import Lexer
     while       { Token TokWhile _ }
     return      { Token TokReturn _ }
     new         { Token TokNew _ }
+    for         { Token TokFor _ }
 
     -- Literals
     identifier      { Token (TokIdentifier $$) _ }
@@ -50,6 +51,7 @@ import Lexer
 
     -- Symbols
     ';'             { Token TokSemicolon _ }
+    ':'             { Token TokColon _ }
     ','             { Token TokComma _ }
     '.'             { Token TokDot _ }
     '('             { Token TokOpenParen _ }
@@ -97,7 +99,7 @@ Arg : Type Identifier { Arg $1 $2 }
 -- Statements --
 
 Block :: { Stmt }
-Block : '{' list(Stmt) '}' {% state $ \i -> (Block i $2, i + 1) }
+Block : '{' list(Stmt) '}' {% makeBlock $2 }
 
 Stmt :: { Stmt }
 Stmt : Type listSepNEmpty(Item, ',') ';' { Decl $1 $2 }
@@ -113,6 +115,8 @@ Stmt1 : ';'                              { Empty }
       | if '(' Expr ')' Stmt1 else Stmt1 { If $3 $5 $7 }
       | if '(' Expr ')' Stmt1            { If $3 $5 Empty }
       | while '(' Expr ')' Stmt1         { While $3 $5 }
+      | for '(' Type Identifier ':' Expr ')' Stmt1
+                                         {% desugarFor $3 $4 $6 $8 }
       | Expr ';'                         { SExpr $1 }
       | Block                            { $1 }
 
@@ -247,5 +251,21 @@ parse s = evalStateT (parseInner s) (globalScopeID + 1)
 
 timesArray :: Int -> Type -> Type
 timesArray n t = iterate TArray t !! n
+
+makeBlock :: [Stmt] -> ParseMonad Stmt
+makeBlock stms = state $ \i -> (Block i stms, i + 1)
+
+desugarFor :: Type -> Identifier -> Expr -> Stmt -> ParseMonad Stmt
+desugarFor t i e s = do
+    inner <- makeBlock $
+                  [ Decl t [Item i $ Just $ EApp "[]" [EVar "@for_array", EVar "@for_iterator"]]
+                  , s
+                  , Incr (EVar "@for_iterator")
+                  ]
+    makeBlock [ Decl (TNamed "int") [Item "@for_iterator" Nothing]
+              , Decl (TArray t) [Item "@for_array" $ Just e]
+              , Decl (TNamed "int") [Item "@for_length" $ Just $ EApp ".length" [EVar "@for_array"]]
+              , While (EApp "<" [EVar "@for_iterator", EVar "@for_length"]) inner
+              ]
 }
 
