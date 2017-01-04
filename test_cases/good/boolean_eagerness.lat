@@ -1,0 +1,28 @@
+int main() {
+    true  && t("+1");
+    true  && t("+2");
+    false && t("-3");
+    false && t("-4");
+
+    true  || t("-5");
+    true  || t("-6");
+    false || t("+7");
+    false || t("+8");
+
+    t("+9")  || t("-10");
+    f("+11") && t("-12");
+    f("+13") || t("+14");
+    t("+15") && t("+16");
+
+    return 0;
+}
+
+boolean t(string note) {
+    printString(note);
+    return true;
+}
+
+boolean f(string note) {
+    printString(note);
+    return false;
+}

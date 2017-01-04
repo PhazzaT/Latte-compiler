@@ -1,0 +1,24 @@
+int main() {
+    f("0", "1", "2", "3", "4", "5", "6", "7");
+    return 0;
+}
+
+void f(string a0, string a1, string a2, string a3, string a4, string a5, string a6, string a7) {
+    printString(a0 + a1 + a2 + a3 + a4 + a5 + a6 + a7);
+    a0 = "A";
+    printString(a0 + a1 + a2 + a3 + a4 + a5 + a6 + a7);
+    a1 = "B";
+    printString(a0 + a1 + a2 + a3 + a4 + a5 + a6 + a7);
+    a2 = "C";
+    printString(a0 + a1 + a2 + a3 + a4 + a5 + a6 + a7);
+    a3 = "D";
+    printString(a0 + a1 + a2 + a3 + a4 + a5 + a6 + a7);
+    a4 = "E";
+    printString(a0 + a1 + a2 + a3 + a4 + a5 + a6 + a7);
+    a5 = "F";
+    printString(a0 + a1 + a2 + a3 + a4 + a5 + a6 + a7);
+    a6 = "G";
+    printString(a0 + a1 + a2 + a3 + a4 + a5 + a6 + a7);
+    a7 = "H";
+    printString(a0 + a1 + a2 + a3 + a4 + a5 + a6 + a7);
+}
