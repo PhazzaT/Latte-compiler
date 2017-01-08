@@ -1,8 +1,15 @@
+{-# LANGUAGE FlexibleContexts #-}
 module Utility where
 
 import Control.Monad.State
+import Control.Monad.Except
+import Control.Monad.Reader
 import Data.List
 import Data.Monoid
+
+import AST
+import Lexer
+import CompileError
 
 
 localState :: (MonadState s m) => (s -> s) -> m a -> m a
@@ -50,4 +57,10 @@ whenJust (Just a) f = f a
 whenNothing :: (Monad m) => Maybe a -> m () -> m ()
 whenNothing Nothing  m = m
 whenNothing (Just _) _ = return ()
+
+
+throwErrorRLoc :: (MonadError PhaseError m, MonadReader LocInfo m) => String -> m a
+throwErrorRLoc s = do
+    loc <- ask
+    throwError $ PhaseError loc s
 

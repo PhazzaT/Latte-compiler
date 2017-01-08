@@ -3,16 +3,20 @@ module SpecialFunctions(returnTypeOfSpecialFunction) where
 
 import Control.Monad
 import Control.Monad.Except
+import Control.Monad.Reader
 import Control.Monad.Trans.Maybe
 import qualified Data.Map as M
 
 import AST
+import CompileError
+import Lexer
+import Utility
 
 
-type LookupFun = forall m. (MonadError String m) => ClassInfo -> Identifier -> [Type] -> MaybeT m Type
+type LookupFun = forall m. (MonadError PhaseError m, MonadReader LocInfo m) => ClassInfo -> Identifier -> [Type] -> MaybeT m Type
 
 
-returnTypeOfSpecialFunction :: (MonadError String m) => ClassInfo -> Identifier -> [Type] -> m (Maybe Type)
+returnTypeOfSpecialFunction :: (MonadError PhaseError m, MonadReader LocInfo m) => ClassInfo -> Identifier -> [Type] -> m (Maybe Type)
 returnTypeOfSpecialFunction ci f args = runMaybeT . msum . map (\fn -> fn ci f args) $
         [ checkSimpleOperators, checkEqualityOperators
         , checkArrayLookupOperator, checkGetFieldOperator
@@ -40,7 +44,7 @@ checkSimpleOperators _ f args = do
     case lookup f operators of
         Nothing        -> continue
         Just overloads -> case lookup args overloads of
-                            Nothing -> throwError $
+                            Nothing -> throwErrorRLoc $
                                 "Unknown overload of operator " ++ f
                                  ++ " with arguments " ++ enumerateList args
                             Just t  -> breakWith t
@@ -50,7 +54,7 @@ checkEqualityOperators :: LookupFun
 checkEqualityOperators _ f [t1, t2]
     | f `elem` ["==", "!="] = if typesEqualityComparable t1 t2
                                  then breakWith tBool
-                                 else throwError $ "Types are incomparable: "
+                                 else throwErrorRLoc $ "Types are incomparable: "
                                                 ++ show t1 ++ " vs. " ++ show t2
     | otherwise = continue
 checkEqualityOperators _ _ _ = continue
@@ -71,10 +75,10 @@ isNullable _ = False
 
 checkArrayLookupOperator :: LookupFun
 checkArrayLookupOperator _ "[]" [tArr, tInd] = do
-    unless (tInd == tInt) $ throwError "Only an int can be an array index"
+    unless (tInd == tInt) $ throwErrorRLoc "Only an int can be an array index"
     case tArr of
         TArray tInner -> breakWith tInner
-        _             -> throwError $ show tArr ++ " is not an array type"
+        _             -> throwErrorRLoc $ show tArr ++ " is not an array type"
 checkArrayLookupOperator _ _ _ = continue
 
 
@@ -83,7 +87,7 @@ checkGetFieldOperator _ ".length" [TArray _] = breakWith tInt
 checkGetFieldOperator ci ('.':mb) [TNamed n] =
     case M.lookup n ci >>= lookup mb of
         Just t -> breakWith t
-        Nothing -> throwError $ "Class " ++ n ++ " has no field \"" ++ mb ++ "\""
+        Nothing -> throwErrorRLoc $ "Class " ++ n ++ " has no field \"" ++ mb ++ "\""
 checkGetFieldOperator _ _ _ = continue
 
 

@@ -15,6 +15,8 @@ import qualified Data.Set as S
 import AST hiding (And)
 import CodeGen.Assembly
 import CodeGen.AssemblyFormatters
+import CompileError
+import Lexer
 
 
 data Context = Context { contextFunctionArguments :: [MangledIdentifier]
@@ -22,15 +24,16 @@ data Context = Context { contextFunctionArguments :: [MangledIdentifier]
                        , contextAssemblyFormatter :: AssemblyFormatter
                        , contextLiteralLabels :: M.Map String String
                        , contextClassInfo :: ClassInfo
+                       , contextLocInfo :: LocInfo
                        }
-type Mo = StateT Integer (WriterT String (ReaderT Context (Except String)))
+type Mo = StateT Integer (WriterT String (ReaderT Context (Except PhaseError)))
 
 
-astToAsm :: AssemblyFormatter -> ProgramTyped -> Either String String
+astToAsm :: AssemblyFormatter -> ProgramTyped -> Either PhaseError String
 astToAsm fmtr p@(Program fns cls) = 
-    let ci = M.fromList $ map (\(ClassDef n mbs) -> (n, mbs)) cls
+    let ci = M.fromList $ map (\(ClassDef n mbs _) -> (n, mbs)) cls
     in runExcept
-        . flip runReaderT (Context [] [] fmtr (collectStringLiterals p) ci)
+        . flip runReaderT (Context [] [] fmtr (collectStringLiterals p) ci NoLocInfo)
         . execWriterT $ flip evalStateT 0 $ do
             boilerplate
             literals <- asks contextLiteralLabels
@@ -59,11 +62,11 @@ boilerplate = do
 
 
 generateFunction :: FnDefTyped -> Mo ()
-generateFunction (FnDef tRet ident args stmt) = do
+generateFunction (FnDef tRet ident args stmt loc) = local (insL loc) $ do
     tellLabel (ArgumentLabel $ identifierLabel ident)
     tellI1 Push RBP
     tellI2 Mov RBP RSP
-    local (\c -> c { contextFunctionArguments = map (\(Arg _ ident) -> ident) args }) $ do
+    local (\c -> c { contextFunctionArguments = map (\(Arg _ ident _) -> ident) args }) $ do
         generateStatement stmt
         -- TODO: Only generate if function type is void
         generateStatement VReturn
@@ -92,10 +95,10 @@ generateStatement (Assign e1 e2) = do
             tellI2 Mov r RAX
 
 generateStatement (Decl t items) = do
-    let work (Item ident Nothing) = do
+    let work (Item ident Nothing loc) = local (insL loc) $ do
             loc <- varBaseLoc ident
             tellI2 Mov loc (0 :: Int64)
-        work (Item ident (Just e)) = do
+        work (Item ident (Just e) loc) = local (insL loc) $ do
             generateExpression e
             loc <- varBaseLoc ident
             tellI2 Mov loc RAX
@@ -162,7 +165,7 @@ getLocalNames :: [StmtTyped] -> [MangledIdentifier]
 getLocalNames = concatMap worker
     where
         worker :: StmtTyped -> [MangledIdentifier]
-        worker (Decl _ decls) = map (\(Item ident _) -> ident) decls
+        worker (Decl _ decls) = map (\(Item ident _ _) -> ident) decls
         worker _              = []
 
 
@@ -203,7 +206,7 @@ generateLValue (EApp ident [e1, e2])
 generateLValue (EApp ident [e])
     | head (identifierLabel ident) == '.' =
         case identifierType ident of
-            TFunction _ [TArray _] -> throwError "Array length is not assignable"
+            TFunction _ [TArray _] -> throwErrorLoc "Array length is not assignable"
             TFunction _ [TNamed s] -> do
                 r <- generateLValue e
                 let mbName = tail $ identifierLabel ident
@@ -213,9 +216,9 @@ generateLValue (EApp ident [e])
                         tellI2 Mov RAX $ QWORD [toArgument RAX]
                         tellI2 Add RAX $ toArgument n
                         return Nothing
-                    Just rr -> throwError "Internal error"
+                    Just rr -> throwErrorLoc "Internal error"
                 
-generateLValue _ = throwError "Expression is not a lvalue"
+generateLValue _ = throwErrorLoc "Expression is not a lvalue"
 
 
 functionCall :: MangledIdentifier -> [ExprTyped] -> Mo ()
@@ -377,7 +380,7 @@ varBaseLoc ident = do
             case mOffset of
                 Just offset ->
                     return . toArgument $ QWORD [RBP ^+ negate (fromIntegral offset * 8 + 8 :: Int64)]
-                Nothing -> throwError $ "Identifier " ++ identifierLabel ident ++ " not found"
+                Nothing -> throwErrorLoc $ "Identifier " ++ identifierLabel ident ++ " not found"
 
 
 registersForArguments :: [Register]
@@ -408,4 +411,14 @@ tellGlobalConst :: GlobalConstant -> Mo ()
 tellGlobalConst gc = do
     conv <- asks $ formatterConstantConverter . contextAssemblyFormatter
     tell $ conv gc ++ "\n"
+
+
+throwErrorLoc :: String -> Mo a
+throwErrorLoc s = do
+    loc <- asks contextLocInfo
+    throwError $ PhaseError loc s
+    
+
+insL :: LocInfo -> Context -> Context
+insL loc c = c { contextLocInfo = loc }
 

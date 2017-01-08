@@ -1,7 +1,6 @@
 module CompilePasses ( compile
                      , lexAndParse
                      , typeCheck
-                     , astToSSA
                      ) where
 
 import Control.Monad((>=>))
@@ -16,7 +15,6 @@ import Lexer
 import Parser
 import TypeCheck
 -- import RenameUnique
-import GenerateSSA
 import CodeGen.Dumb
 import CodeGen.AssemblyFormatters.Gas
 import CodeGen.AssemblyFormatters.Nasm

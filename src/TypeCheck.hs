@@ -10,11 +10,13 @@ import Data.Maybe
 import qualified Data.Set as S
 
 import AST
+import Lexer
 import Utility
 import SpecialFunctions
+import CompileError
 
 
-type TypeCheckMonad = StateT Context (Except String)
+type TypeCheckMonad = ReaderT LocInfo (StateT Context (Except PhaseError))
 data Context = Context { returnType             :: Type
                        , activeBlocks           :: [BlockID]
 --                        , definitionLocationInfo :: DefinitionLocationInfo
@@ -30,42 +32,42 @@ type TypeInfo = M.Map Identifier MangledIdentifier
 type OverloadInfo = M.Map (Identifier, [Type]) Type
 
 
-buildTypeInformation :: Program -> Either String ProgramTyped
+buildTypeInformation :: Program -> Either PhaseError ProgramTyped
 buildTypeInformation = runTCM . btiProgram
 
 
 btiProgram :: Program -> TypeCheckMonad ProgramTyped
 btiProgram (Program fns cls) = do
     buildClassInfo cls
-    forM_ fns $ \(FnDef tRet ident args _) -> do
-        let argsTypes = map (\(Arg t _) -> t) args
+    forM_ fns $ \(FnDef tRet ident args _ loc) -> local (const loc) $ do
+        let argsTypes = map (\(Arg t _ _) -> t) args
         checkType $ TFunction tRet argsTypes
         writeFunctionInfo ident argsTypes tRet
-    fns' <- forM fns $ \(FnDef tRet ident args body@(Block bid stms)) ->
-        withBlock bid $ do
-            let argsTypes = map (\(Arg t _) -> t) args
-            args' <- forM args $ \(Arg t ident) -> do
+    fns' <- forM fns $ \(FnDef tRet ident args (SLocInfo body@(Block bid stms) loc) floc) ->
+        local (const loc) $ withBlock bid $ do
+            let argsTypes = map (\(Arg t _ _) -> t) args
+            args' <- forM args $ \(Arg t ident loc) -> local (const loc) $ do
                 ident' <- writeVariableInfo ident t
-                return $ Arg t ident'
+                return $ Arg t ident' loc
             ident' <- mangleFunction ident argsTypes
             body' <- withReturnType tRet $ Block bid <$> mapM btiStmt stms
-            return $ FnDef tRet ident' args' body'
+            return $ FnDef tRet ident' args' body' floc
     return $ Program fns' cls
 
 
 buildClassInfo :: [ClassDef] -> TypeCheckMonad ()
 buildClassInfo cls = do
-    let allDefs = map (\(ClassDef n mbs) -> (n, mbs)) cls
+    let allDefs = map (\(ClassDef n mbs _) -> (n, mbs)) cls
                ++ map (\x -> (x, [])) builtinTypeNames
     whenJust (findDuplicateOrd $ map fst allDefs) $ \d ->
-        throwError $ "Duplicate class declarations for " ++ d
+        throwErrorRLoc $ "Duplicate class declarations for " ++ d
     modify $ \c -> c { classInfo = M.fromList allDefs }
-    forM_ cls $ \(ClassDef n mbs) -> do
+    forM_ cls $ \(ClassDef n mbs loc) -> local (const loc) $ do
         let (fieldNames, types) = unzip mbs
         -- Check if there are no duplicate fields and all types are known
         mapM_ checkType types
         whenJust (findDuplicateOrd fieldNames) $ \d ->
-            throwError $ "Duplicate definitions of field " ++ d ++ " in class " ++ n
+            throwErrorRLoc $ "Duplicate definitions of field " ++ d ++ " in class " ++ n
 
 
 checkType :: Type -> TypeCheckMonad ()
@@ -73,8 +75,8 @@ checkType (TNamed s) = do
     m <- gets $ M.lookup s . classInfo
     whenNothing m $
         if s == "void"
-            then throwError "void is not a valid value type"
-            else throwError $ "Unknown type: " ++ s
+            then throwErrorRLoc "void is not a valid value type"
+            else throwErrorRLoc $ "Unknown type: " ++ s
 checkType (TArray t) = checkType t
 checkType (TFunction tRet tArgs) = do
     mapM_ checkType tArgs
@@ -119,10 +121,11 @@ btiStmt (While cond stmt)      = do
     (cond', tcond) <- btiExpr cond
     typeCompare tBool tcond
     While cond' <$> btiStmt stmt
+btiStmt (SLocInfo s loc)       = local (const loc) $ btiStmt s
 
 
 btiItem :: Type -> Item -> TypeCheckMonad ItemTyped
-btiItem t (Item ident me) = do
+btiItem t (Item ident me loc) = local (const loc) $ do
     e' <- case me of
         Just e  -> do
             (e'', te) <- btiExpr e
@@ -131,14 +134,14 @@ btiItem t (Item ident me) = do
         Nothing -> return Nothing
     blocks <- gets activeBlocks
     ident' <- writeVariableInfo ident t
-    return $ Item ident' e'
+    return $ Item ident' e' loc
 
 
 typeCompare :: Type -> Type -> TypeCheckMonad ()
 typeCompare (TArray _) TNull = return ()
 typeCompare (TNamed _) TNull = return ()
 typeCompare t1 t2 = when (t1 /= t2) $
-    throwError $ "Expected type " ++ show t1 ++ ", got " ++ show t2
+    throwErrorRLoc $ "Expected type " ++ show t1 ++ ", got " ++ show t2
 
 
 btiExpr :: Expr -> TypeCheckMonad (ExprTyped, Type)
@@ -159,6 +162,7 @@ btiExpr (ENew t@(TNamed _) []) = return (ENew t [], t)
 btiExpr (EVar ident)          = do
     ident' <- mangleVariable ident
     return (EVar ident', identifierType ident')
+btiExpr (ELocInfo e loc)      = local (const loc) $ btiExpr e
 
 
 writeVariableInfo :: Identifier -> Type -> TypeCheckMonad MangledIdentifier
@@ -166,7 +170,7 @@ writeVariableInfo ident t = do
     blocks <- gets activeBlocks
     oldDefinition <- gets $ M.lookup ident . variableTypeInfo
     let wasDefined = maybe False ((blocks==) . identifierScope) oldDefinition
-    when wasDefined $ throwError $ "Variable " ++ show ident ++ " was already defined"
+    when wasDefined $ throwErrorRLoc $ "Variable " ++ show ident ++ " was already defined"
     let mangledIdent = MangledIdentifier ident t blocks
     modify $ \c -> c { variableTypeInfo = M.insert ident mangledIdent $ variableTypeInfo c }
     return mangledIdent
@@ -175,7 +179,7 @@ writeVariableInfo ident t = do
 writeFunctionInfo :: Identifier -> [Type] -> Type -> TypeCheckMonad ()
 writeFunctionInfo ident tArgs tRet = do
     wasDefined <- gets $ (Nothing/=) . M.lookup (ident, tArgs) . functionTypeInfo
-    when wasDefined $ throwError $ "Multiple overloads of function " ++ show ident
+    when wasDefined $ throwErrorRLoc $ "Multiple overloads of function " ++ show ident
                                     ++ " with the same arguments: " ++ show tArgs
     modify $ \c -> c { functionTypeInfo = M.insert (ident, tArgs) tRet $ functionTypeInfo c }
 
@@ -201,11 +205,11 @@ getVariableType ident = identifierType <$> mangleVariable ident
     -- info <- gets typeInfo
     -- case M.lookup ident dli >>= \loc -> M.lookup (SLoc loc ident) info of
     --     Just t  -> return t
-    --     Nothing -> throwError $ "Unknown variable: " ++ show ident
+    --     Nothing -> throwErrorRLoc $ "Unknown variable: " ++ show ident
 
 
-runTCM :: TypeCheckMonad a -> Either String a
-runTCM = runExcept . (`evalStateT` defaultContext)
+runTCM :: TypeCheckMonad a -> Either PhaseError a
+runTCM = runExcept . (`evalStateT` defaultContext) . (`runReaderT` NoLocInfo)
 
 
 defaultContext :: Context
@@ -230,7 +234,7 @@ mangleVariable :: Identifier -> TypeCheckMonad MangledIdentifier
 mangleVariable i = do
     vti <- gets variableTypeInfo
     case M.lookup i vti of
-        Nothing -> throwError $ "Not in scope: variable " ++ show i
+        Nothing -> throwErrorRLoc $ "Not in scope: variable " ++ show i
         Just mi -> return mi
 
 
@@ -245,7 +249,7 @@ mangleFunction i tArgs = do
             Nothing -> do
                 fti <- gets functionTypeInfo
                 case M.lookup (i, tArgs) fti of
-                    Nothing   -> throwError $ "Unknown function: "
+                    Nothing   -> throwErrorRLoc $ "Unknown function: "
                                     ++ show i ++ " with args " ++ show tArgs
                     Just t    -> return t
     return $ MangledIdentifier i (TFunction tRet tArgs) [0]

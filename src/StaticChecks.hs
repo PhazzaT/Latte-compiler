@@ -1,23 +1,26 @@
 module StaticChecks where
 
 import AST
+import CompileError
+import Lexer
 
 
-staticChecks :: ProgramTyped -> Either String ()
+staticChecks :: ProgramTyped -> Either PhaseError ()
 staticChecks = checkReturns
 
 
-checkReturns :: ProgramTyped -> Either String ()
+checkReturns :: ProgramTyped -> Either PhaseError ()
 checkReturns (Program fns cls) = mapM_ crFnDef fns
 
 
-crFnDef :: FnDefTyped -> Either String ()
-crFnDef (FnDef (TNamed "void") _ _ _) = Right ()
-crFnDef (FnDef _ ident _ stmt) =
+crFnDef :: FnDefTyped -> Either PhaseError ()
+crFnDef (FnDef (TNamed "void") _ _ _ _) = Right ()
+crFnDef (FnDef _ ident _ stmt loc) =
     if crStmt stmt
        then Right ()
-       else Left $ "Not all control paths of function " ++ identifierLabel ident
-                 ++ " return a value"
+       else Left $ PhaseError NoLocInfo $
+                       "Not all control paths of function " ++ identifierLabel ident
+                    ++ " return a value"
 
 
 crStmt :: StmtTyped -> Bool

@@ -3,8 +3,10 @@ module CompileError where
 
 import Data.Generics
 
+import AST
 
-data CompileError = CompileError CompileErrorType String deriving (Eq, Ord, Data)
+data CompileError = CompileError CompileErrorType PhaseError deriving (Eq, Ord, Data)
+data PhaseError = PhaseError LocInfo String deriving (Eq, Ord, Data)
 
 data CompileErrorType
     = ParseError 
@@ -14,8 +16,13 @@ data CompileErrorType
     deriving (Eq, Ord, Data)
 
 
+instance Show PhaseError where
+    show (PhaseError NoLocInfo s)       = s
+    show (PhaseError (LocInfo p1 p2) s) = show p1 ++ " - " ++ show p2 ++ " " ++ s
+
+
 instance Show CompileError where
-    show (CompileError t msg) = show t ++ ": " ++ msg
+    show (CompileError t msg) = show t ++ ": " ++ show msg
 
 
 instance Show CompileErrorType where
@@ -25,18 +32,18 @@ instance Show CompileErrorType where
     show CodeGenerationError = "Code generation error"
 
 
-parseError :: String -> CompileError
+parseError :: PhaseError -> CompileError
 parseError = CompileError ParseError
 
 
-typeCheckError :: String -> CompileError
+typeCheckError :: PhaseError -> CompileError
 typeCheckError = CompileError TypeCheckError
 
 
-staticAnalysisError :: String -> CompileError
+staticAnalysisError :: PhaseError -> CompileError
 staticAnalysisError = CompileError StaticAnalysisError
 
 
-codeGenerationError :: String -> CompileError
+codeGenerationError :: PhaseError -> CompileError
 codeGenerationError = CompileError CodeGenerationError
 

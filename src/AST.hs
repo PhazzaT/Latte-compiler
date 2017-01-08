@@ -8,17 +8,19 @@ import Data.String
 import Data.Generics
 import qualified Data.Map as M
 
+-- import Lexer
+
 data ProgramF i = Program [FnDefF i] [ClassDef] deriving (Eq, Data, Typeable, Show)
 type Program = ProgramF Identifier
 type ProgramTyped = ProgramF MangledIdentifier
 
 type ClassInfo = M.Map String [(String, Type)]
 
-data FnDefF i = FnDef Type i [ArgF i] (StmtF i) deriving (Eq, Data, Typeable, Show)
+data FnDefF i = FnDef Type i [ArgF i] (StmtF i) LocInfo deriving (Eq, Data, Typeable, Show)
 type FnDef = FnDefF Identifier
 type FnDefTyped = FnDefF MangledIdentifier
 
-data ArgF i = Arg Type i deriving (Eq, Data, Typeable, Show)
+data ArgF i = Arg Type i LocInfo deriving (Eq, Data, Typeable, Show)
 type Arg = ArgF Identifier
 type ArgTyped = ArgF MangledIdentifier
 
@@ -33,11 +35,12 @@ data StmtF i = Assign (ExprF i) (ExprF i)
              | SExpr (ExprF i)
              | VReturn
              | While (ExprF i) (StmtF i)
+             | SLocInfo (StmtF i) LocInfo
              deriving (Eq, Data, Typeable, Show)
 type Stmt = StmtF Identifier
 type StmtTyped = StmtF MangledIdentifier
 
-data ItemF i = Item i (Maybe (ExprF i)) deriving (Eq, Data, Typeable, Show)
+data ItemF i = Item i (Maybe (ExprF i)) LocInfo deriving (Eq, Data, Typeable, Show)
 type Item = ItemF Identifier
 type ItemTyped = ItemF MangledIdentifier
 
@@ -48,11 +51,12 @@ data ExprF i = EString String
              | ENull
              | ENew Type [ExprF i]
              | EVar i
+             | ELocInfo (ExprF i) LocInfo
              deriving (Eq, Data, Typeable, Show)
 type Expr = ExprF Identifier
 type ExprTyped = ExprF MangledIdentifier
 
-data ClassDef = ClassDef String [(String, Type)] deriving (Eq, Data, Typeable, Show)
+data ClassDef = ClassDef String [(String, Type)] LocInfo deriving (Eq, Data, Typeable, Show)
 
 data LogicOp = Or | And deriving (Eq, Data, Typeable)
 data AddOp = Plus | Minus deriving (Eq, Data, Typeable)
@@ -98,6 +102,18 @@ data MangledIdentifier = MangledIdentifier { identifierLabel :: Identifier
                                            , identifierScope :: [BlockID]
                                            } deriving (Eq, Data, Ord, Show, Typeable)
 
+-- If we could use newer base library, we would do calculations in type
+-- (Maybe (Min Int, Max Int), a)
+-- but because we do not have Semigroup yet, the following helper type is used.
+data LocInfo = NoLocInfo
+             | LocInfo !(Int, Int) !(Int, Int) deriving (Eq, Data, Ord, Show, Typeable)
+
+
+instance Monoid LocInfo where
+    mempty = NoLocInfo
+    mappend (LocInfo a b) (LocInfo c d) = LocInfo (min a c) (max b d)
+    mappend NoLocInfo m = m
+    mappend m NoLocInfo = m
 
 globalScopeID :: BlockID
 globalScopeID = 0
