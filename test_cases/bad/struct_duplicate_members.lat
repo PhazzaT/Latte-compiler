@@ -1,0 +1,9 @@
+class foo {
+    int x, y, z;
+    string v, w, x;
+}
+
+int main() {
+    return 0;
+}
+

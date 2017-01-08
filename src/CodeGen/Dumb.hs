@@ -21,14 +21,16 @@ data Context = Context { contextFunctionArguments :: [MangledIdentifier]
                        , contextStackVariables :: [MangledIdentifier]
                        , contextAssemblyFormatter :: AssemblyFormatter
                        , contextLiteralLabels :: M.Map String String
+                       , contextClassInfo :: ClassInfo
                        }
 type Mo = StateT Integer (WriterT String (ReaderT Context (Except String)))
 
 
 astToAsm :: AssemblyFormatter -> ProgramTyped -> Either String String
-astToAsm fmtr p@(Program fns) =
-    runExcept
-        . flip runReaderT (Context [] [] fmtr $ collectStringLiterals p)
+astToAsm fmtr p@(Program fns cls) = 
+    let ci = M.fromList $ map (\(ClassDef n mbs) -> (n, mbs)) cls
+    in runExcept
+        . flip runReaderT (Context [] [] fmtr (collectStringLiterals p) ci)
         . execWriterT $ flip evalStateT 0 $ do
             boilerplate
             literals <- asks contextLiteralLabels
@@ -177,7 +179,11 @@ generateExpression (EString s) = do
 generateExpression (EBoolLiteral True) = tellI2 Mov RAX (1 :: Int64)
 generateExpression (EBoolLiteral False) = tellI2 Xor RAX RAX
 generateExpression (EIntLiteral i) = tellI2 Mov RAX (fromInteger i :: Int64)
-generateExpression (ENew _ es) = functionCallDirect "__alloc_array" es
+generateExpression ENull = tellI2 Mov RAX (0 :: Int64)
+generateExpression (ENew (TArray _) [e]) = functionCallDirect "__alloc_array" [e]
+generateExpression (ENew (TNamed s) []) = do
+    l <- max 8 <$> getClassSize s -- malloc(0) can return null, we want to prevent that
+    functionCallDirect "__alloc_object" [EIntLiteral $ fromIntegral l]
 
 
 generateLValue :: ExprTyped -> Mo (Maybe Register)
@@ -193,6 +199,22 @@ generateLValue (EApp ident [e1, e2])
         checkArrayBounds
         tellI2 Lea RAX $ QWORD [R11 ^+ (8 :: Int64) ^* RAX ^+ (8 :: Int64)]
         return Nothing
+
+generateLValue (EApp ident [e])
+    | head (identifierLabel ident) == '.' =
+        case identifierType ident of
+            TFunction _ [TArray _] -> throwError "Array length is not assignable"
+            TFunction _ [TNamed s] -> do
+                r <- generateLValue e
+                let mbName = tail $ identifierLabel ident
+                n <- getOffsetInClass s mbName
+                case r of
+                    Nothing -> do
+                        tellI2 Mov RAX $ QWORD [toArgument RAX]
+                        tellI2 Add RAX $ toArgument n
+                        return Nothing
+                    Just rr -> throwError "Internal error"
+                
 generateLValue _ = throwError "Expression is not a lvalue"
 
 
@@ -204,9 +226,16 @@ functionCall ident [e]
     | identifierLabel ident == "!" = do
         generateExpression e
         tellI2 Xor RAX (1 :: Int64)
-    | identifierLabel ident == ".length" = do
+    | head (identifierLabel ident) == '.' = do
         generateExpression e
-        tellI2 Mov RAX $ QWORD [toArgument RAX]
+        case identifierType ident of
+            TFunction _ [TArray _] ->
+                tellI2 Mov RAX $ QWORD [toArgument RAX] -- It must be .length
+            TFunction _ [TNamed s] -> do
+                let mbName = tail $ identifierLabel ident
+                n <- getOffsetInClass s mbName
+                tellI2 Mov RAX $ QWORD [RAX ^+ n]
+                
 functionCall ident [e1, e2]
     | identifierLabel ident `elem` ["+", "-"]
     && identifierType ident == TFunction tInt [tInt, tInt] = do
@@ -259,6 +288,23 @@ functionCall ident [e1, e2]
         checkArrayBounds
         tellI2 Mov RAX $ QWORD [R11 ^+ (8 :: Int64) ^* RAX ^+ (8 :: Int64)]
 functionCall ident args = functionCallDirect (identifierLabel ident) args
+
+
+getOffsetInClass :: String -> String -> Mo Int64
+getOffsetInClass s mb =
+    asks $ (8*)
+         . fromIntegral
+         . fromJust
+         . elemIndex mb
+         . map fst
+         . fromJust
+         . M.lookup s
+         . contextClassInfo
+
+
+getClassSize :: String -> Mo Int64
+getClassSize s =
+    asks $ (8*) . fromIntegral . length . fromJust . M.lookup s . contextClassInfo
 
 
 functionCallDirect :: String -> [ExprTyped] -> Mo ()

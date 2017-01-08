@@ -1,0 +1,29 @@
+class list {
+    list next;
+    int value;
+}
+
+int main() {
+    list l1 = new list;
+    l1.value = 3;
+    list l2 = new list;
+    l2.value = 7;
+
+    l1.next = l2;
+    l2.next = l1;
+
+    int i = 5;
+    int acc = 0;
+    list ptr = l1;
+
+    while (i > 0) {
+        acc = acc + ptr.value;
+        printInt(acc);
+
+        ptr = ptr.next;
+        i--;
+    }
+
+    return 0;
+}
+

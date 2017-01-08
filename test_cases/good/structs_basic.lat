@@ -1,0 +1,36 @@
+class foo {
+    int a;
+    string b;
+}
+
+void assert(boolean b) {
+    if (!b) {
+        printString("Assertion failed");
+        error();
+    }
+}
+
+int main() {
+    foo f1, f2;
+    f1 = new foo;
+    f1.a = 42;
+    f1.b = "foo";
+    f2 = new foo;
+    f2.a = 64;
+    f2.b = "bar";
+
+    assert(f1.a == 42);
+    assert(f1.b == "foo");
+    assert(f2.a == 64);
+    assert(f2.b == "bar");
+
+    f2 = f1;
+
+    assert(f1.a == 42);
+    assert(f1.b == "foo");
+    assert(f2.a == 42);
+    assert(f2.b == "foo");
+
+    return 0;
+}
+

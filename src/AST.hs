@@ -6,10 +6,13 @@ module AST where
 import Data.List
 import Data.String
 import Data.Generics
+import qualified Data.Map as M
 
-newtype ProgramF i = Program [FnDefF i] deriving (Eq, Data, Typeable, Show)
+data ProgramF i = Program [FnDefF i] [ClassDef] deriving (Eq, Data, Typeable, Show)
 type Program = ProgramF Identifier
 type ProgramTyped = ProgramF MangledIdentifier
+
+type ClassInfo = M.Map String [(String, Type)]
 
 data FnDefF i = FnDef Type i [ArgF i] (StmtF i) deriving (Eq, Data, Typeable, Show)
 type FnDef = FnDefF Identifier
@@ -42,11 +45,14 @@ data ExprF i = EString String
              | EApp i [ExprF i]
              | EBoolLiteral Bool
              | EIntLiteral Integer
+             | ENull
              | ENew Type [ExprF i]
              | EVar i
              deriving (Eq, Data, Typeable, Show)
 type Expr = ExprF Identifier
 type ExprTyped = ExprF MangledIdentifier
+
+data ClassDef = ClassDef String [(String, Type)] deriving (Eq, Data, Typeable, Show)
 
 data LogicOp = Or | And deriving (Eq, Data, Typeable)
 data AddOp = Plus | Minus deriving (Eq, Data, Typeable)
@@ -77,6 +83,7 @@ instance Show RelOp where
 data Type = TNamed String
           | TArray Type
           | TFunction Type [Type]
+          | TNull
           deriving (Eq, Ord, Data, Typeable)
 
 instance Show Type where
@@ -104,6 +111,7 @@ typeMangle :: Type -> String
 typeMangle (TNamed n) = n
 typeMangle (TArray t) = '@' : typeMangle t
 typeMangle (TFunction tRet ts) = "\\" ++ typeMangle tRet ++ "(" ++ intercalate "," (map typeMangle ts) ++ ")"
+typeMangle TNull = "<null>"
 
 
 tVoid :: Type
@@ -117,4 +125,10 @@ tString = TNamed "string"
 
 tInt :: Type
 tInt = TNamed "int"
+
+
+builtinTypeNames :: [String]
+builtinTypeNames = ["boolean", "string", "int"] -- void is ommitted because
+                                                -- it is not a valid value
+                                                -- type
 

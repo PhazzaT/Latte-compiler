@@ -7,6 +7,7 @@ import Control.Monad.State
 
 import qualified Data.Map as M
 import Data.Maybe
+import qualified Data.Set as S
 
 import AST
 import Utility
@@ -19,6 +20,7 @@ data Context = Context { returnType             :: Type
 --                        , definitionLocationInfo :: DefinitionLocationInfo
                        , variableTypeInfo       :: TypeInfo
                        , functionTypeInfo       :: OverloadInfo
+                       , classInfo              :: ClassInfo
                        } deriving (Show, Eq)
 -- (Type, BlockID, DefinitionLocationInfo)
 -- type TypeInfo = M.Map VariableLocation Type
@@ -33,11 +35,13 @@ buildTypeInformation = runTCM . btiProgram
 
 
 btiProgram :: Program -> TypeCheckMonad ProgramTyped
-btiProgram (Program fns) = do
-    forM_ fns $ \(FnDef tRet ident args _) ->
+btiProgram (Program fns cls) = do
+    buildClassInfo cls
+    forM_ fns $ \(FnDef tRet ident args _) -> do
         let argsTypes = map (\(Arg t _) -> t) args
-        in writeFunctionInfo ident argsTypes tRet
-    fmap Program $ forM fns $ \(FnDef tRet ident args body@(Block bid stms)) ->
+        checkType $ TFunction tRet argsTypes
+        writeFunctionInfo ident argsTypes tRet
+    fns' <- forM fns $ \(FnDef tRet ident args body@(Block bid stms)) ->
         withBlock bid $ do
             let argsTypes = map (\(Arg t _) -> t) args
             args' <- forM args $ \(Arg t ident) -> do
@@ -46,6 +50,36 @@ btiProgram (Program fns) = do
             ident' <- mangleFunction ident argsTypes
             body' <- withReturnType tRet $ Block bid <$> mapM btiStmt stms
             return $ FnDef tRet ident' args' body'
+    return $ Program fns' cls
+
+
+buildClassInfo :: [ClassDef] -> TypeCheckMonad ()
+buildClassInfo cls = do
+    let allDefs = map (\(ClassDef n mbs) -> (n, mbs)) cls
+               ++ map (\x -> (x, [])) builtinTypeNames
+    whenJust (findDuplicateOrd $ map fst allDefs) $ \d ->
+        throwError $ "Duplicate class declarations for " ++ d
+    modify $ \c -> c { classInfo = M.fromList allDefs }
+    forM_ cls $ \(ClassDef n mbs) -> do
+        let (fieldNames, types) = unzip mbs
+        -- Check if there are no duplicate fields and all types are known
+        mapM_ checkType types
+        whenJust (findDuplicateOrd fieldNames) $ \d ->
+            throwError $ "Duplicate definitions of field " ++ d ++ " in class " ++ n
+
+
+checkType :: Type -> TypeCheckMonad ()
+checkType (TNamed s) = do
+    m <- gets $ M.lookup s . classInfo
+    whenNothing m $
+        if s == "void"
+            then throwError "void is not a valid value type"
+            else throwError $ "Unknown type: " ++ s
+checkType (TArray t) = checkType t
+checkType (TFunction tRet tArgs) = do
+    mapM_ checkType tArgs
+    when (tRet /= tVoid) $ checkType tRet
+checkType TNull = return ()
 
 
 btiStmt :: Stmt -> TypeCheckMonad StmtTyped
@@ -55,7 +89,9 @@ btiStmt (Assign e1 e2)         = do
     typeCompare te1 te2
     return $ Assign e1' e2'
 btiStmt (Block bid stmts)      = withBlock bid $ Block bid <$> mapM btiStmt stmts
-btiStmt (Decl t items)         = Decl t <$> mapM (btiItem t) items
+btiStmt (Decl t items)         = do
+    checkType t
+    Decl t <$> mapM (btiItem t) items
 btiStmt (Decr e)               = do
     (e', te) <- btiExpr e
     typeCompare tInt te
@@ -99,6 +135,8 @@ btiItem t (Item ident me) = do
 
 
 typeCompare :: Type -> Type -> TypeCheckMonad ()
+typeCompare (TArray _) TNull = return ()
+typeCompare (TNamed _) TNull = return ()
 typeCompare t1 t2 = when (t1 /= t2) $
     throwError $ "Expected type " ++ show t1 ++ ", got " ++ show t2
 
@@ -112,11 +150,12 @@ btiExpr (EApp ident args)     = do
     return (EApp ident' args', tRet)
 btiExpr (EBoolLiteral b)      = return (EBoolLiteral b, tBool)
 btiExpr (EIntLiteral i)       = return (EIntLiteral i, tInt)
+btiExpr ENull                 = return (ENull, TNull)
 btiExpr (ENew t@(TArray _) [e]) = do
     (e', te) <- btiExpr e
     typeCompare tInt te
     return (ENew t [e'], t)
-btiExpr (ENew _ _)            = throwError "Objects are not supported yet!"
+btiExpr (ENew t@(TNamed _) []) = return (ENew t [], t)
 btiExpr (EVar ident)          = do
     ident' <- mangleVariable ident
     return (EVar ident', identifierType ident')
@@ -173,7 +212,9 @@ defaultContext :: Context
 defaultContext = Context { returnType       = tVoid
                          , activeBlocks     = [0]
                          , variableTypeInfo = defaultVariableTypeInfo
-                         , functionTypeInfo = defaultFunctionTypeInfo}
+                         , functionTypeInfo = defaultFunctionTypeInfo
+                         , classInfo        = M.empty
+                         }
 
 
 defaultVariableTypeInfo = M.fromList []
@@ -181,6 +222,7 @@ defaultFunctionTypeInfo = M.fromList [ (("printInt", [tInt]), tVoid)
                                      , (("readInt", []), tInt)
                                      , (("printString", [tString]), tVoid)
                                      , (("readString", []), tString)
+                                     , (("error", []), tVoid)
                                      ]
 
 
@@ -196,7 +238,8 @@ mangleFunction :: Identifier -> [Type] -> TypeCheckMonad MangledIdentifier
 mangleFunction i tArgs = do
     -- Check if it is a special function
     tRet <- do
-        spec <- returnTypeOfSpecialFunction i tArgs
+        ci <- gets classInfo
+        spec <- returnTypeOfSpecialFunction ci i tArgs
         case spec of
             Just t -> return t
             Nothing -> do

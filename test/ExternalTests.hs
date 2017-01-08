@@ -52,6 +52,8 @@ runFileTests = do
                                                  , CompilationFail TypeCheckError
                                                  , CompilationFail StaticAnalysisError ]
 
+    run "Structure tests" (baseExternalDir </> "extensions/struct/") [Success]
+
 
 runTestsInDirectory :: [TestResult] -> FilePath -> IO Spec
 runTestsInDirectory desired dir = do

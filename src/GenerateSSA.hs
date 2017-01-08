@@ -68,7 +68,7 @@ type TARegNumbers = M.Map AST.MangledIdentifier Integer
 
 
 astToSSA :: AST.ProgramTyped -> Either String (M.Map AST.MangledIdentifier [TACode])
-astToSSA (AST.Program fns) =
+astToSSA (AST.Program fns _) =
     let fns' = fixVoidFunctions fns
     in fmap M.fromList $ runExcept $ (`evalStateT` TAState 0 0 M.empty) $
         forM fns' $ \(AST.FnDef tRet ident args stmt) -> do

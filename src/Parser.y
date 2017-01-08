@@ -42,6 +42,8 @@ import Lexer
     return      { Token TokReturn _ }
     new         { Token TokNew _ }
     for         { Token TokFor _ }
+    class       { Token TokClass _ }
+    null        { Token TokNull _ }
 
     -- Literals
     identifier      { Token (TokIdentifier $$) _ }
@@ -87,7 +89,17 @@ import Lexer
 -- Programs --
 
 Program :: { Program }
-Program : list(FnDef) { Program $1 }
+Program : list(TopLevel) { programFromTLs $1 }
+
+TopLevel :: { TopLevel }
+TopLevel : ClassDef { TLClass $1 }
+         | FnDef    { TLFn $1 }
+
+ClassDef :: { ClassDef }
+ClassDef : class Identifier '{' list(MemberDef) '}' { ClassDef $2 $ concat $4 }
+
+MemberDef :: { [(String, Type)] }
+MemberDef : Type listSepNEmpty(Identifier, ',') ';' { map (\x -> (x, $1)) $2 }
 
 FnDef :: { FnDef }
 FnDef : Type Identifier '(' listSep(Arg, ',') ')' Block { FnDef $1 $2 $4 $6 }
@@ -131,6 +143,7 @@ Item : Identifier          { Item $1 Nothing }
 ExprPrimary :: { Expr }
 ExprPrimary : ExprPrimaryNoNewArray { $1 }
             | ExprArrayCreation     { $1 }
+            | ExprObjectCreation    { $1 }
 
 ExprPrimaryNoNewArray :: { Expr }
 ExprPrimaryNoNewArray : ExprLiteral     { $1 }
@@ -142,6 +155,7 @@ ExprLiteral :: { Expr }
 ExprLiteral : stringLiteral { EString $1 }
             | boolLiteral   { EBoolLiteral $1 }
             | intLiteral    { EIntLiteral $1 }
+            | null          { ENull }
 
 ExprArrayAccess :: { Expr }
 ExprArrayAccess : Identifier '[' Expr ']'            { EApp "[]" [EVar $1, $3] }
@@ -152,6 +166,9 @@ ExprFieldAccess : Expr6 '.' Identifier { EApp ('.' : $3) [$1] }
 
 ExprArrayCreation :: { Expr }
 ExprArrayCreation : new Identifier '[' Expr ']' ArrayMarks { ENew (timesArray ($6 + 1) (TNamed $2)) [$4] }
+
+ExprObjectCreation :: { Expr }
+ExprObjectCreation : new Identifier { ENew (TNamed $2) [] }
 
 Expr :: { Expr }
 Expr : Expr1 '||' Expr { EApp "||" [$1, $3] }
@@ -171,6 +188,7 @@ Expr4 : Expr4 MulOp Expr5 { EApp (show $2) [$1, $3] }
 Expr5 :: { Expr }
 Expr5 : '!' Expr6 { EApp "!" [$2] }
       | '-' Expr6 { EApp "-" [$2] }
+--       | '(' Type ')' Expr5 { ECast $2 $4 }
       | Expr6     { $1 }
 Expr6 :: { Expr }
 Expr6 : Identifier '(' listSep(Expr, ',') ')' { EApp $1 $3 }
@@ -238,6 +256,7 @@ listSuf(x, s) : listSufNEmpty(x, s) { $1 }
 
 
 {
+data TopLevel = TLFn FnDef | TLClass ClassDef
 type ParseMonad = StateT Integer (Either String)
 
 parseError :: [Token] -> ParseMonad a
@@ -267,5 +286,14 @@ desugarFor t i e s = do
               , Decl (TNamed "int") [Item "@for_length" $ Just $ EApp ".length" [EVar "@for_array"]]
               , While (EApp "<" [EVar "@for_iterator", EVar "@for_length"]) inner
               ]
+
+programFromTLs :: [TopLevel] -> Program
+programFromTLs [] = Program [] []
+programFromTLs (TLFn fn : ls) =
+    let Program fns cls = programFromTLs ls
+    in Program (fn : fns) cls
+programFromTLs (TLClass cs : ls) =
+    let Program fns cls = programFromTLs ls
+    in Program fns (cs : cls)
 }
 

@@ -26,6 +26,8 @@ tokens :-
     "return"    { simpleTok TokReturn }
     "new"       { simpleTok TokNew }
     "for"       { simpleTok TokFor }
+    "class"     { simpleTok TokClass }
+    "null"      { simpleTok TokNull }
 
     -- Literals
     "true"                               { simpleTok $ TokBoolLiteral True }
@@ -72,6 +74,8 @@ data TokenData = TokIf
                | TokReturn
                | TokNew
                | TokFor
+               | TokClass
+               | TokNull
                | TokIdentifier String
                | TokIntLiteral Integer
                | TokStrLiteral String

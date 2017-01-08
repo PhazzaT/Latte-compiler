@@ -1,0 +1,9 @@
+foo f() {
+    return null;
+}
+
+int main() {
+    f();
+    return 0;
+}
+

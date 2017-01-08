@@ -1,0 +1,8 @@
+class foo {
+    bar baz;
+}
+
+int main() {
+    return 0;
+}
+

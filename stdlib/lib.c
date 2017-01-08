@@ -22,6 +22,13 @@ int64_t * __alloc_array(int64_t size)
     return arr;
 }
 
+void * __alloc_object(int64_t size)
+{
+    void * mem = malloc(size);
+    memset(mem, 0, size);
+    return mem;
+}
+
 void printInt(int64_t i)
 {
     printf("%ld\n", i);
@@ -40,6 +47,8 @@ int64_t readInt(void)
 
 const char * __add_strings(const char * sz1, const char * sz2)
 {
+    if (!sz1) sz1 = "";
+    if (!sz2) sz2 = "";
     const size_t l1 = strlen(sz1);
     const size_t l2 = strlen(sz2);
     char * ret = (char*)malloc(l1 + l2 + 1);
@@ -53,7 +62,7 @@ const char * __add_strings(const char * sz1, const char * sz2)
 
 void printString(const char * sz)
 {
-    puts(sz);
+    puts(sz ? sz : "");
 }
 
 const char * readString(void)

@@ -1,0 +1,22 @@
+class unit {}
+
+void assert(boolean b) {
+    if (!b) {
+        error();
+    }
+}
+
+int main() {
+    unit u;
+    assert(u == null);
+
+    u = new unit;
+    assert(u != null);
+
+    u = null;
+    assert(u == null);
+
+    assert(null == null);
+
+    return 0;
+}

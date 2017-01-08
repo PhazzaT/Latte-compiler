@@ -8,7 +8,7 @@ staticChecks = checkReturns
 
 
 checkReturns :: ProgramTyped -> Either String ()
-checkReturns (Program fns) = mapM_ crFnDef fns
+checkReturns (Program fns cls) = mapM_ crFnDef fns
 
 
 crFnDef :: FnDefTyped -> Either String ()

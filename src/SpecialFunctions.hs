@@ -4,22 +4,23 @@ module SpecialFunctions(returnTypeOfSpecialFunction) where
 import Control.Monad
 import Control.Monad.Except
 import Control.Monad.Trans.Maybe
+import qualified Data.Map as M
 
 import AST
 
 
-type LookupFun = forall m. (MonadError String m) => Identifier -> [Type] -> MaybeT m Type
+type LookupFun = forall m. (MonadError String m) => ClassInfo -> Identifier -> [Type] -> MaybeT m Type
 
 
-returnTypeOfSpecialFunction :: (MonadError String m) => Identifier -> [Type] -> m (Maybe Type)
-returnTypeOfSpecialFunction f args = runMaybeT . msum . map (\fn -> fn f args) $
+returnTypeOfSpecialFunction :: (MonadError String m) => ClassInfo -> Identifier -> [Type] -> m (Maybe Type)
+returnTypeOfSpecialFunction ci f args = runMaybeT . msum . map (\fn -> fn ci f args) $
         [ checkSimpleOperators, checkEqualityOperators
         , checkArrayLookupOperator, checkGetFieldOperator
         ]
 
 
 checkSimpleOperators :: LookupFun
-checkSimpleOperators f args = do
+checkSimpleOperators _ f args = do
     let utype tfrom tto = ([tfrom], tto)
     let btype tfrom tto = ([tfrom, tfrom], tto)
     let operators = [ ("+",  [btype tInt tInt, btype tString tString])
@@ -46,29 +47,44 @@ checkSimpleOperators f args = do
 
 
 checkEqualityOperators :: LookupFun
-checkEqualityOperators f [t1, t2]
-    | f `elem` ["==", "!="] = if t1 == t2
+checkEqualityOperators _ f [t1, t2]
+    | f `elem` ["==", "!="] = if typesEqualityComparable t1 t2
                                  then breakWith tBool
-                                 else throwError $ "Compared types (with " ++ f
-                                                ++ ") are different: "
+                                 else throwError $ "Types are incomparable: "
                                                 ++ show t1 ++ " vs. " ++ show t2
     | otherwise = continue
-checkEqualityOperators _ _ = continue
+checkEqualityOperators _ _ _ = continue
+
+
+typesEqualityComparable :: Type -> Type -> Bool
+typesEqualityComparable TNull t = isNullable t
+typesEqualityComparable t TNull = isNullable t
+typesEqualityComparable t1 t2 = t1 == t2
+
+
+isNullable :: Type -> Bool
+isNullable TNull = True
+isNullable (TArray _) = True
+isNullable (TNamed _) = True
+isNullable _ = False
 
 
 checkArrayLookupOperator :: LookupFun
-checkArrayLookupOperator "[]" [tArr, tInd] = do
+checkArrayLookupOperator _ "[]" [tArr, tInd] = do
     unless (tInd == tInt) $ throwError "Only an int can be an array index"
     case tArr of
         TArray tInner -> breakWith tInner
         _             -> throwError $ show tArr ++ " is not an array type"
-checkArrayLookupOperator _ _ = continue
+checkArrayLookupOperator _ _ _ = continue
 
 
 checkGetFieldOperator :: LookupFun
-checkGetFieldOperator ".length" [TArray _] = breakWith tInt
-checkGetFieldOperator ('.':_) [] = throwError "Object fields are not implemented yet!"
-checkGetFieldOperator _ _ = continue
+checkGetFieldOperator _ ".length" [TArray _] = breakWith tInt
+checkGetFieldOperator ci ('.':mb) [TNamed n] =
+    case M.lookup n ci >>= lookup mb of
+        Just t -> breakWith t
+        Nothing -> throwError $ "Class " ++ n ++ " has no field \"" ++ mb ++ "\""
+checkGetFieldOperator _ _ _ = continue
 
 
 enumerateList :: (Show a) => [a] -> String

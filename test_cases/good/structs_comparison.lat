@@ -1,0 +1,22 @@
+class unit {}
+
+void assert(boolean b) {
+    if (!b) {
+        error();
+    }
+}
+
+int main() {
+    unit u1 = new unit;
+    unit u2 = new unit;
+
+    assert(u1 == u1);
+    assert(u2 == u2);
+    assert(u1 != u2);
+
+    u1 = u2;
+    assert(u1 == u2);
+
+    return 0;
+}
+
